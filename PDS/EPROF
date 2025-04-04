@@ -1,0 +1,2199 @@
+./ ADD NAME=CLCAUP01 0100-02231-02231-1300-00160-00160-00000-MOORE
+*-------------------------------------------------------------------*/
+* Assembly Options to Use:                                          */
+*                                                                   */
+* PARM=(NOADATA,ALIGN,NOASA,RENT,NODECK)                            */
+*                                                                   */
+* Link-Edit Options to use:                                         */
+*                                                                   */
+* PARM=(LET,LIST,MAP,XREF,RENT)                                     */
+*                                                                   */
+*-----------------------------------/*------------------------------*/
+R0       EQU    0                   /* Left-Justify and "smooth"    */
+R1       EQU    1                   /* a character string.          */
+R2       EQU    2                   /* ---------------------------- */
+R3       EQU    3                   /* Any leading X'40' or X'00'   */
+R4       EQU    4                   /* are removed. Also, imbedded  */
+R5       EQU    5                   /* X'40' & X'00' removed unless */
+R6       EQU    6                   /* PARMLEAV=Y. Then, a single   */
+R7       EQU    7                   /* blank is left in place.      */
+R8       EQU    8                   /*                              */
+R9       EQU    9                   /* Length of string is returned */
+R10      EQU    10                  /* (highest non-blank in 133)   */
+R11      EQU    11                  /* Max length allowed is 133    */
+R12      EQU    12                  /* Reentrant, 31-Any            */
+R13      EQU    13                  /*                              */
+R14      EQU    14                  /*                              */
+R15      EQU    15                  /*                              */
+CLCAUP01 CSECT                      /*------------------------------*/
+CLCAUP01 AMODE 31                   /* Jim Moore                    */
+CLCAUP01 RMODE ANY                  /* Concentrated Logic Inc       */
+         PRINT NOGEN                /*------------------------------*/
+BEGIN    STM   R14,R12,12(R13)      /* Save Regs in Caller Save     */
+         LR    R12,R15              /* Get 15 addr into 12          */
+         USING CLCAUP01,R12         /* R12 is base                  */
+         L     R3,0(R1)             /* Base R3 with parm address    */
+         USING LINKAGE,R3           /* R3 bases linkage             */
+         LA    R0,LSTOR             /* Length for GETMAIN           */
+         GETMAIN RC,LV=(0),LOC=ANY  /* Get some private storage     */
+         LTR   R15,R15              /* Did we get it?               */
+         BNZ   GETMERR              /* No..Else                     */
+         LR    R9,R1                /* 1 into R9 (storage address)  */
+         USING STORAREA,R9          /* R9 bases storage             */
+         ST    R13,SAVEAREA+4       /* Save Addr of Caller Savearea */
+         LR    R2,R13               /* Copy contents of R13         */
+         LA    R13,SAVEAREA         /* Point to my Savearea         */
+         ST    R13,8(R2)            /* Save it in Caller's chain    */
+*-----------------------------------/*------------------------------*/
+MAINLINE DS    0H                   /* -----------------------------*/
+         MVC   WRKAREA1,BLANKS      /* Clear the Work Area          */
+         MVC   WRKPARM,PARMSTRG     /* Move the passed string       */
+         MVC   WRKLEN,PARMLEN       /* Move the passed length       */
+         CLC   WRKPARM,BLANKS       /* 133 blanks?                  */
+         BE    RETURN               /* Buh-Bye Now                  */
+         CLC   WRKPARM,LOVAL        /* 133 nulls?                   */
+         BE    RETURN               /* Buh-Bye Now                  */
+         CLC   WRKLEN,=C'001'       /* Caller passed at least 1?    */
+         BL    DEFLEN               /* No, go force default length  */
+         CLC   WRKLEN,=C'133'       /* Caller passed at most 133?   */
+         BH    DEFLEN               /* No, go force default length  */
+HSEKEEP  DS    0H                   /* -----------------------------*/
+         LA    R4,WRKAREA1          /* R4 points to move-to         */
+         LA    R5,WRKPARM           /* R5 points to move-from       */
+         PACK  PKDLEN,WRKLEN        /* Pack passed length           */
+         ZAP   SCANLEN,ZERO         /* Zero the scan length         */
+         ZAP   WRKRLEN,ZERO         /* Zero the returned length     */
+STARTIT  DS    0H                   /* -----------------------------*/
+         CLC   0(1,R5),=C' '        /* Leading X'40'?               */
+         BE    LJSTART              /* Yes-Ignore                   */
+         CLC   0(1,R5),=X'00'       /* Leading X'00'?               */
+         BE    LJSTART              /* Yes-IgnoreE                  */
+         B     SCAN                 /* Begin Scan                   */
+LJSTART  DS    0H                   /* -----------------------------*/
+         BAL   R10,BUMP             /* Go bump R5                   */
+         B     STARTIT              /* Continue on leading chars    */
+SCAN     DS    0H                   /* -----------------------------*/
+         CLI   0(R5),C' '           /* X'40'?                       */
+         BE    DROPSPAC             /* Yes-Drop                     */
+         CLI   0(R5),X'00'          /* X'00'?                       */
+         BE    DROPSPAC             /* Yes-Drop                     */
+         MVC   0(1,R4),0(R5)        /* Move a character             */
+         AP    WRKRLEN,PKD1         /* Bump the returned length     */
+         BAL   R10,BUMP             /* Go bump R5                   */
+         AH    R4,HWD1              /* Bump R4                      */
+         CLI   PARMLEAV,C'Y'        /* Leave a space?               */
+         BNE   NOSPACE              /* NO                           */
+         CLI   0(R5),C' '           /* Pointing to a X'40'?         */
+         BNE   NOSPACE              /* NO                           */
+         MVI   0(R4),C' '           /* Force a space in             */
+         AH    R4,HWD1              /* Bump R4                      */
+         AP    WRKRLEN,PKD1         /* Bump the returned length     */
+         BAL   R10,BUMP             /* Go bump R5                   */
+NONBLOOP DS    0H                   /* -----------------------------*/
+         CP    SCANLEN,PKDLEN       /* Compare to passed string len */
+         BH    RETURN               /* If high, buh-bye             */
+         CLI   0(R5),C' '           /* Pointing to a X'40'?         */
+         BNE   SCAN                 /* NO                           */
+         BAL   R10,BUMP             /* Go bump R5                   */
+         B     NONBLOOP             /* Continue looking for char    */
+NOSPACE  DS    0H                   /* -----------------------------*/
+         CP    SCANLEN,PKDLEN       /* Compare to passed string len */
+         BNH   SCAN                 /* If NOT high, continue scan   */
+         B     RETURN               /* Buh-Bye Now                  */
+DROPSPAC DS    0H                   /* -----------------------------*/
+         BAL   R10,BUMP             /* Go bump R5                   */
+         CP    SCANLEN,PKDLEN       /* Compare to passed string len */
+         BNH   CONT                 /* If NOT high, continue scan   */
+         B     RETURN               /* Buh-Bye Now                  */
+CONT     DS    0H                   /* -----------------------------*/
+         CLI   0(R5),C' '           /* X'40'?                       */
+         BE    DROPSPAC             /* Yes-Drop                     */
+         CLI   0(R5),X'00'          /* X'00'?                       */
+         BE    DROPSPAC             /* Yes-Drop                     */
+         B     SCAN                 /* Continue scan                */
+BUMP     DS    0H                   /* -----------------------------*/
+         AH    R5,HWD1              /* Increment R5                 */
+         AP    SCANLEN,PKD1         /* Increment number of chars    */
+         BR    R10                  /* Go back                      */
+DEFLEN   DS    0H                   /* -----------------------------*/
+         MVC   WRKLEN,=C'133'       /* Force length to 133          */
+         B     HSEKEEP              /* And start                    */
+RETURN   DS    0H                   /* -----------------------------*/
+         MVC   PARMSTRG,WRKAREA1    /* Move work back to linkage    */
+         MVC   PARMRLEN,SCANLEN     /* Same with length of string   */
+FREESTG  DS    0H                   /* ---------------------------- */
+         L     R13,SAVEAREA+4       /* Restore Caller Save Addr     */
+         LA    R0,LSTOR             /* Load length for FREEMAIN     */
+         FREEMAIN RU,LV=(0),A=(9)   /* Free R9-pointed storage      */
+GETMERR  DS    0H                   /* ---------------------------- */
+         LM    R14,R12,12(R13)      /* Restore GP Regs for Caller   */
+         LA    R15,0                /* Clear R15                    */
+         BR    R14                  /* Adios, Buh-Bye, Farewell     */
+*---Constants and Literals----------/*------------------------------*/
+COPYRITE DC  CL50'CLCAUP01 - Concentrated Logic Inc. (c) 2001 -- OS/'
+         DC  CL50'390 Left-Just and "smooth" strings.  Assembled--> '
+         DC    C' &SYSDATC '        /*                              */
+         DC    C' &SYSTIME '        /*                              */
+         DC    C' Using '           /*                              */
+         DC    C' &SYSASM  '        /*                              */
+HWD1     DC    H'1'                 /*                              */
+PKD1     DC    PL2'1'               /*                              */
+ZERO     DC    PL2'0'               /*                              */
+LOVAL    DC    XL133'00'            /*                              */
+BLANKS   DC    CL133' '             /*                              */
+         LTORG                      /*                              */
+*---Linkage from Caller-------------/*------------------------------*/
+LINKAGE DSECT                       /*                              */
+PARMSTRG DS  CL133                  /* String Passed Here           */
+PARMLEN  DS  CL3                    /* Length Passed Here           */
+PARMRLEN DS  PL2                    /* Length Returned here         */
+PARMLEAV DS  CL1                    /* Leave 1 Space? = Y           */
+*---GetMain'd Work Areas------------/*------------------------------*/
+STORAREA DSECT                      /*                              */
+SAVEAREA DS  18F                    /*                              */
+WRKAREA1 DS  CL133                  /*                              */
+WRKPARM  DS  CL133                  /*                              */
+WRKLEN   DS  CL3                    /*                              */
+WRKRLEN  DS  PL2                    /*                              */
+SCANLEN  DS  PL2                    /*                              */
+PKDLEN   DS  PL2                    /*                              */
+LSTOR    EQU *-STORAREA             /*                              */
+         END
+./ ADD NAME=CLCCEPRF 0100-02325-02325-1912-01554-01554-00000-MOORE
+000100* -------------------------------------------------------------- *
+000200* Compile Options To use:                                        *
+000300*                                                                *
+000400* PARM=(RENT,RMODE(ANY),NOSEQ,SSRANGE,APOST,                     *
+000500* NOADV,SOURCE,MAP,XREF,TRUNC(BIN),NUMPROC(PFD))                 *
+000600*                                                                *
+000700* Link-Edit Options To use:                                      *
+000800*                                                                *
+000900* PARM=(LET,LIST,MAP,XREF,RENT)                                  *
+001000*                                                                *
+001100*                                                                *
+001200* -------------------------------------------------------------- *
+001300 Identification Division.
+001400 Program-ID.    CLCCEPRF is Initial.
+001500 Author.        Jim Moore. Concentrated Logic Inc.
+001600 Environment Division.
+001700 Configuration Section.
+001800 Special-Names.
+001900     Class Valid-1st-Char  Is "A" Thru "I"
+002000                              "J" Thru "R"
+002100                              "S" Thru "Z" "!"
+002200     Class Valid-Name-Char Is "A" Thru "I"
+002300                              "J" Thru "R"
+002400                              "S" Thru "Z"
+002500                              "0" Thru "9" " ".
+002600 Data Division.
+002700
+002800 Working-Storage Section.
+002900 01  Copyright.
+003000     05                     Pic  X(52) Value
+003100         " ------------ISPF Edit Profile Utility------------- ".
+003200     05                     Pic  X(53) Value
+003300         "Copyright 1990,2002 - Concentrated Logic Incorporated".
+003400 01  Switches.
+003500     05  Finished-SW        Pic  X(01) Value Zero.
+003600         88  Finished                  Value "Y".
+003700     05  Row-Del-SW         Pic  X(01) Value Zero.
+003800         88  Row-Deleted               Value "Y".
+003900     05  Row-Mod-SW         Pic  X(01) Value Zero.
+004000         88  Row-Modified              Value "Y".
+004100 01  Misc-Data-Flds.
+004200     05  Number-of-Rows     Pic S9(02) Value +0.
+004300     05  Last-Row           Pic S9(02) Value +0.
+004400     05  Top-Row            Pic S9(02) Value +0.
+004500     05  Max-Work-Row       Pic S9(02) Value +0.
+004600     05  Work-Row           Pic  9(02) Value Zeros.
+004700     05  Changes-Made       Pic S9(07) Packed-Decimal Value +0.
+004800     05  A-One              Pic  X(01) Value "1".
+004900
+005000 01  Table-Search-Arguments.
+005100     05  Profile-Type       Pic  X(08).
+005200     05  Profile-F-V        Pic  X(01).
+005300     05  Profile-Lrecl      Pic  9(05) Packed-Decimal.
+005400 01  Feedback-Codes.
+005500     05  FC-Severity        Pic S9(04) Binary.
+005600     05  FC-Message         Pic S9(04) Binary.
+005700     05                     Pic  X(08).
+005800 01  DYN-Area-Length        Pic S9(08) Binary.
+005900 01  Work-DYN-Area-Length   Pic S9(08) Binary.
+006000 01  Max-Dynarea-Rows       Pic S9(08) Binary.
+006100 01  Heap-0                 Pic S9(08) Binary Value +0.
+006200 01  DYN-Area-Pointer       Pointer.
+006300 01  DYN-Area-Pointer-1     Pointer.
+006400 01  Work-DYN-Area-Pointer  Pointer.
+006500 01  Function-Pool-Variables.
+006600     05  FP-1-Byte-Fields.
+006700         10  ZEDPTABC       Pic  X(01) Value Space.
+006800         10  ZEDPRCFM       Pic  X(01) Value Spaces.
+006900             88  Fixed-Lrecl           Value "F".
+007000             88  Variable-Lrecl        Value "V".
+007100     05  FP-3-Byte-Fields.
+007200         10  ZGE            Pic  X(03) Value Spaces.
+007300     05  FP-4-Byte-FixFlds  Binary.
+007400         10  ZEDPLRCL       Pic  9(08) Value Zeros.
+007500         10  ZEDPBNDL       Pic  9(08) Value Zeros.
+007600         10  ZEDPBNDR       Pic  9(08) Value Zeros.
+007700         10  LASTLINE       Pic S9(08) Value Zeros.
+007800         10  EPRFNROW       Pic S9(08) Value Zeros.
+007900     05  FP-4-Byte-Fields.
+008000         10  ZAPPLID        Pic  X(04) Value Spaces.
+008100         10  ZSCROLLA       Pic  X(04) Value Zeros.
+008200             88  Max-Parm              Value "MAX ".
+008300         10  ZSCROLLA-N     Redefines ZSCROLLA,
+008400                            Pic  9(04).
+008500         10  ZSCROLLN       Pic  9(04) Value Zeros.
+008600     05  FP-8-Byte-Fields.
+008700         10  FP-Address     Pic  X(08) Value Spaces.
+008800         10  ZEDPTYPE       Pic  X(08) Value Spaces.
+008900         10  ZEDPIMAC       Pic  X(08) Value Spaces.
+009000         10  ZEDPFLG2                  Value Spaces.
+009100             15  Z-Rec-Warn Pic  X(01).
+009200                 88  Rec-Off-Nowarn    Value "1".
+009300                 88  Rec-Off-Warn      Value "0".
+009400             15             Pic  X(01).
+009500             15             Pic  X(01).
+009600                 88  HiLite-On         Value "1".
+009700             15             Pic  X(01).
+009800                 88  HiLite-DO-On      Value "1".
+009900             15             Pic  X(01).
+010000                 88  HiLite-If-On      Value "1".
+010100             15             Pic  X(01).
+010200                 88  HiLite-Paren-On   Value "1".
+010300             15             Pic  X(01).
+010400                 88  HiLite-Find-On    Value "1".
+010500             15             Pic  X(01).
+010600                 88  HiLite-Cursor-On  Value "1".
+010700         10  ZEDPFLG3                  Value Spaces.
+010800             15             Pic  X(03).
+010900             15  Lang-Selct Pic  X(05).
+011000                 88  Automatic-Lang    Value "00001".
+011100                 88  Assembler-Lang    Value "00010".
+011200                 88  BookMaster-Lang   Value "00111".
+011300                 88  C-Lang            Value "00110".
+011400                 88  COBOL-Lang        Value "00100".
+011500                 88  IDL-Lang          Value "10000".
+011600                 88  DTL-Lang          Value "01100".
+011700                 88  Panel-Lang        Value "01001".
+011800                 88  Skel-Lang         Value "01010".
+011900                 88  JCL-Lang          Value "01011".
+012000                 88  Pascal-Lang       Value "00101".
+012100                 88  PL1-Lang          Value "00011".
+012200                 88  REXX-Lang         Value "01000".
+012300                 88  Other-Lang        Value "01101".
+012400                 88  Default-Lang      Value "01110".
+012500         10  ZVERB          Pic  X(08) Value Spaces.
+012600             88  Scroll-Down           Value "DOWN    ".
+012700             88  Scroll-Up             Value "UP      ".
+012800         10  ZUSER          Pic  X(08) Value Spaces.
+012900         10  EPRFEPGM       Pic  X(08) Value Spaces.
+013000     05  FP-24-Byte-Fields.
+013100         10  ZEDPFLAG                  Value Spaces.
+013200             15 Z-ProfL     Pic  X(01).
+013300                88  Prof-Lock          Value "1".
+013400             15 Z-Caps      Pic  X(01).
+013500                88  Caps-On            Value "1".
+013600                88  Caps-Off           Value Zero.
+013700             15 Z-Note      Pic  X(01).
+013800                88  Note-On            Value Zero.
+013900             15 Z-Hex-Vert  Pic  X(01).
+014000                88  Hex-On-Vert        Value "1".
+014100             15 Z-Hex-Data  Pic  X(01).
+014200                88  Hex-On-Data        Value "1".
+014300             15 Z-Pack      Pic  X(01).
+014400                88  Pack-On            Value "1".
+014500             15 Z-Nulls-Std Pic  X(01).
+014600                88  Nulls-On-STD       Value "1".
+014700             15 Z-Nulls-All Pic  X(01).
+014800                88  Nulls-On-ALL       Value "1".
+014900             15 Z-Num-Disp  Pic  X(01).
+015000                88  Numbering-ON-Disp  Value "1".
+015100             15 Z-Num       Pic  X(01).
+015200                88  Numbering-ON       Value "1".
+015300                88  Numbering-OFF      Value Zero.
+015400             15 Z-NumCob    Pic  X(01).
+015500                88  Numbering-ON-COB   Value "1".
+015600             15 Z-NumStd    Pic  X(01).
+015700                88  Numbering-ON-STD   Value "1".
+015800             15 Z-Pos-13    Pic  X(01).
+015900                88  Stats-ON-Again     Value "1".
+016000             15 Z-Tabs-Std  Pic  X(01).
+016100                88  Tabs-ON-STD        Value "1".
+016200             15 Z-Tabs-All  Pic  X(01).
+016300                88  Tabs-ON-ALL        Value "1".
+016400             15 Z-Tabs-Char Pic  X(01).
+016500                88  Tabs-ON-Using-Char Value "1".
+016600             15 Z-Pos-17    Pic  X(01).
+016700             15 Z-Autonum   Pic  X(01).
+016800                88  Autonum-On         Value "1".
+016900             15 Z-Autolist  Pic  X(01).
+017000                88  AutoList-On        Value "1".
+017100             15 Z-Stats     Pic  X(01).
+017200                88  Stats-ON           Value "1".
+017300                88  Stats-OFF          Value Zero.
+017400             15 Z-Recovery  Pic  X(01).
+017500                88  Recovery-On        Value "1".
+017600             15 Z-Pos-22    Pic  X(01).
+017700                88  Prof-Lock-Again    Value "1".
+017800             15 Z-AutoSave-NoP Pic  X(01).
+017900                88  AutoSave-Off-NoP   Value "1".
+018000             15 Z-AutoSave-P   Pic  X(01).
+018100                88  AutoSave-Off-P     Value "1".
+018200         10  Panel-Header   Pic  X(24) Value Spaces.
+018300     05  FP-26-Byte-Fields             Value Spaces.
+018400         10  EP-Recover.
+018500             15             Pic  X(10).
+018600                 88  Set-Rec-Off-Nowrn Value "OFF NOWARN".
+018700                 88  Set-Rec-Off-Warn  Value "OFF WARN  ".
+018800                 88  Set-Rec-On        Value "ON        ".
+018900             15             Pic  X(16).
+019000         10  EP-Stats.
+019100             15             Pic  X(03).
+019200                 88  Set-Stats-Off     Value "OFF".
+019300                 88  Set-Stats-On      Value "ON ".
+019400             15             Pic  X(23).
+019500         10  EP-Nulls.
+019600             15             Pic  X(06).
+019700                 88  Set-Nulls-Off     Value "OFF   ".
+019800                 88  Set-Nulls-On      Value "ON STD".
+019900                 88  Set-Nulls-All     Value "ON ALL".
+020000             15             Pic  X(20).
+020100         10  EP-Caps.
+020200             15             Pic  X(03).
+020300                 88  Set-Caps-Off      Value "OFF".
+020400                 88  Set-Caps-On       Value "ON ".
+020500             15             Pic  X(23).
+020600         10  EP-Number.
+020700             15             Pic  X(10).
+020800                 88  Set-Nbr-Off       Value "OFF       ".
+020900                 88  Set-Nbr-On        Value "ON STD    ".
+021000                 88  Set-Nbr-On-COB    Value "ON COB    ".
+021100                 88  Set-Nbr-On-Both   Values "ON COB STD",
+021200                                              "ON STD COB".
+021300             15             Pic  X(16).
+021400         10  EP-Hex.
+021500             15             Pic  X(07).
+021600                 88  Set-Hex-Off       Value "OFF    ".
+021700                 88  Set-Hex-On        Value "ON VERT".
+021800                 88  Set-Hex-On-Data   Value "ON DATA".
+021900             15             Pic  X(19).
+022000         10  EP-AutoSave.
+022100             15             Pic  X(12).
+022200                 88  Set-AutoS-On      Value "ON          ".
+022300                 88  Set-AutoS-Off-P   Value "OFF PROMPT  ".
+022400                 88  Set-AutoS-Off-NoP Value "OFF NOPROMPT".
+022500             15             Pic  X(14).
+022600         10  EP-Pack.
+022700             15             Pic  X(03).
+022800                 88  Set-Pack-Off      Value "OFF".
+022900                 88  Set-Pack-On       Value "ON ".
+023000             15             Pic  X(23).
+023100         10  EP-Profile.
+023200             15             Pic  X(06).
+023300                 88  Set-Prof-Lock     Value "LOCK  ".
+023400                 88  Set-Prof-Unlock   Value "UNLOCK".
+023500             15             Pic  X(20).
+023600         10  EP-Tabs.
+023700             15             Pic  X(09).
+023800                 88  Set-Tabs-Off      Value "OFF      ".
+023900                 88  Set-Tabs-On       Value "ON STD   ".
+024000                 88  Set-Tabs-On-All   Value "ON ALL   ".
+024100                 88  Set-Tabs-On-Char  Value "ON <CHAR>".
+024200             15             Pic  X(17).
+024300         10  EP-AutoList.
+024400             15             Pic  X(03).
+024500                 88  Set-AutoL-Off     Value "OFF".
+024600                 88  Set-AutoL-On      Value "ON ".
+024700             15             Pic  X(23).
+024800         10  EP-Note.
+024900             15             Pic  X(03).
+025000                 88  Set-Note-Off      Value "OFF".
+025100                 88  Set-Note-On       Value "ON ".
+025200             15             Pic  X(23).
+025300         10  EP-AutoNum.
+025400             15             Pic  X(03).
+025500                 88  Set-AutoN-Off     Value "OFF".
+025600                 88  Set-AutoN-On      Value "ON ".
+025700             15             Pic  X(23).
+025800         10  EP-HiLite      Pic  X(26).
+025900         10  EP-HiLang      Pic  X(26).
+026000         10  Generic-Error  Pic  X(26).
+026100     05  FP-30-Byte-Fields.
+026200         10  Detail-Header  Pic  X(30) Value Spaces.
+026300         10  EPRFGMSG       Pic  X(30) Value Spaces.
+026400     05  FP-80-Byte-Fields.
+026500         10  ZEDPMASK       Pic  X(80) Value Spaces.
+026600         10  ZEDPTABS       Pic  X(80) Value Spaces.
+026700         10  EPRFMASK       Pic  X(80) Value Spaces.
+026800         10  EPRFTABL       Pic  X(80) Value Spaces.
+026900     05  FP-256-Byte-Fields.
+027000         10  EPRFTVAR       Pic X(256) Value Spaces.
+027100     05  FP-60-Byte-Fields.
+027200         10  ZCMD                      Value Spaces.
+027300             15             Pic  X(08).
+027400             88  Cancel-CMD            Value "CANCEL  "
+027500                                             "CAN     ".
+027600             15             Pic  X(52).
+027700 01  Unstring-Area.
+027800     05  Command-Area       Pic  X(08).
+027900         88  I-MAC-All                 Value "IMACRO  "
+028000                                             "IMAC    "
+028100                                             "IM      ".
+028200         88  Stats-All                 Value "STATS   "
+028300                                             "STAT    ".
+028400         88  Caps-All                  Value "CAPS    "
+028500                                             "CAP     ".
+028600         88  Pack-All                  Value "PACK    ".
+028700         88  Recovery-ALL              Value "RECOVERY"
+028800                                             "RECOVER "
+028900                                             "REC     ".
+029000         88  Nulls-All                 Value "NULLS   "
+029100                                             "NULL    ".
+029200         88  Number-All                Value "NUMBER  "
+029300                                             "NBR     "
+029400                                             "NUM     ".
+029500         88  HiLite-All                Value "HILITE  "
+029600                                             "HI      ".
+029700         88  Refresh-Table             Value "REFRESH "
+029800                                             "REF     ".
+029900     05  Parm-Area          Pic  X(08).
+030000         88  On-Parm                   Value "ON      ".
+030100         88  Off-Parm                  Value "OFF     ".
+030200         88  Paren-Parm                Value "PAREN   ".
+030300         88  Find-Parm                 Value "FIND    ".
+030400         88  Cursor-Parm               Value "CURSOR  ".
+030500         88  Auto-Parm                 Value "AUTO    ".
+030600         88  Remove-IMAC               Value "NONE    ".
+030700     05  Xtra-Stuff         Pic  X(08).
+030800         88  Warn-Parm                 Value "WARN    ".
+030900         88  NoWarn-Parm               Value "NOWARN  ".
+031000/
+031100 01  Work-ZEDPFLAG.
+031200     10  Wk-ProfL           Pic  X(01).
+031300     10  Wk-Caps            Pic  X(01).
+031400     10  Wk-Note            Pic  X(01).
+031500     10  Wk-Hex-Vert        Pic  X(01).
+031600     10  Wk-Hex-Data        Pic  X(01).
+031700     10  Wk-Pack            Pic  X(01).
+031800     10  Wk-Nulls-Std       Pic  X(01).
+031900     10  Wk-Nulls-All       Pic  X(01).
+032000     10  Wk-Number-Disp     Pic  X(01).
+032100     10  Wk-Number-Setting  Pic  X(03).
+032200     10  Wk-Pos-13          Pic  X(01).
+032300     10  Wk-Tab-Setting     Pic  X(03).
+032400     10  Wk-Pos-17          Pic  X(01).
+032500     10  Wk-Autonum         Pic  X(01).
+032600     10  Wk-AutoList        Pic  X(01).
+032700     10  Wk-Stats           Pic  X(01).
+032800     10  Wk-Recovery        Pic  X(01).
+032900     10  Wk-Pos-22          Pic  X(01).
+033000     10  Wk-AutoSave-NoP    Pic  X(01).
+033100     10  Wk-AutoSave-P      Pic  X(01).
+033200 01  Work-ZEDPFLG2.
+033300     10  Wk-Rec-Warn        Pic  X(01).
+033400     10                     Pic  X(07).
+033500 01  Work-ZEDPIMAC          Pic  X(08).
+033600 01  Edit-ZEDPIMAC          Pic  X(08).
+033700 01  DA-Address             Pic  X(08).
+033800 01  ISPF-Name-Literals.
+033900     05  Vdef-L1-Lit        Pic  X(19)
+034000         Value "(ZEDPTABC,ZEDPRCFM)".
+034100     05  Vdef-L3-Lit        Pic  X(05)
+034200         Value "(ZGE)".
+034300     05  Vdef-L4-LitFix     Pic  X(46)
+034400         Value "(ZEDPLRCL,ZEDPBNDL,ZEDPBNDR,LASTLINE,EPRFNROW)".
+034500     05  Vdef-L4-Lit        Pic  X(27)
+034600         Value "(ZAPPLID,ZSCROLLA,ZSCROLLN)".
+034700     05  Vdef-L8-Lit.
+034800         10                 Pic  X(44)
+034900         Value "(FPADDR,ZEDPTYPE,ZEDPIMAC,ZEDPFLG2,ZEDPFLG3,".
+035000         10                 Pic  X(21)
+035100         Value "ZVERB,ZUSER,EPRFEPGM)".
+035200     05  Vdef-L24-Lit       Pic  X(17)
+035300         Value "(ZEDPFLAG,HEADER)".
+035400*               ----+----1----+----2----+----3----+----4----+----5
+035500     05  Vdef-L26-Lit.
+035600         10                 Pic  X(48)
+035700         Value "(EPRFRECY,EPRFSTAT,EPRFNULL,EPRFCAPS,EPRFNUMB,EP".
+035800         10                 Pic  X(48)
+035900         Value "RFHEXO,EPRFAUSV,EPRFPACK,EPRFPROF,EPRFTABS,EPRFA".
+036000         10                 Pic  X(48)
+036100         Value "ULS,EPRFNOTE,EPRFAUNM,EPRFHILT,EPRFLANG,EPRFGERR".
+036200         10                 Pic  X(01)
+036300         Value ")".
+036400     05  Vdef-L30-Lit       Pic  X(18)
+036500         Value "(DHEADER,EPRFGMSG)".
+036600     05  Vdef-L80-Lit       Pic  X(37)
+036700         Value "(ZEDPMASK,ZEDPTABS,EPRFMASK,EPRFTABL)".
+036800     05  Vdef-L60-Lit       Pic  X(06)
+036900         Value "(ZCMD)".
+037000     05  Vdef-L256-Lit      Pic  X(10)
+037100         Value "(EPRFTVAR)".
+037200     05  Vrep-DYN-Lit       Pic  X(09)
+037300         Value "(DYNAREA)".
+037400     05  Panel-Vars.
+037500         10                 Pic  X(39)
+037600         Value "(ZVERB,ZCMD,ZSCROLLA,ZSCROLLN,LASTLINE)".
+037700         10                 Pic  X(12)
+037800         Value Space.
+037900/
+038000 01  ISPF-API-Services.
+038100     05  Addpop             Pic  X(08) Value "ADDPOP".
+038200     05  Display-P          Pic  X(08) Value "DISPLAY".
+038300     05  Rempop             Pic  X(08) Value "REMPOP".
+038400     05  SetMsg             Pic  X(08) Value "SETMSG".
+038500     05  TBAdd              Pic  X(08) Value "TBADD".
+038600     05  TBClose            Pic  X(08) Value "TBCLOSE".
+038700     05  TBDelete           Pic  X(08) Value "TBDELETE".
+038800     05  TBDispl            Pic  X(08) Value "TBDISPL".
+038900     05  TBMod              Pic  X(08) Value "TBMOD".
+039000     05  TBOpen             Pic  X(08) Value "TBOPEN".
+039100     05  TBQuery            Pic  X(08) Value "TBQUERY".
+039200     05  TBSkip             Pic  X(08) Value "TBSKIP".
+039300     05  TBTop              Pic  X(08) Value "TBTOP".
+039400     05  Vcopy              Pic  X(08) Value "VCOPY".
+039500     05  Vdefine            Pic  X(08) Value "VDEFINE".
+039600     05  Vget               Pic  X(08) Value "VGET".
+039700     05  Vput               Pic  X(08) Value "VPUT".
+039800     05  Vreplace           Pic  X(08) Value "VREPLACE".
+039900 01  ISPF-API-Parameters.
+040000     05  Len-Fld            Pic S9(08) Binary.
+040100     05  Beg-Pos            Pic S9(08) Binary.
+040200     05  Dyna1-Len-Fld      Pic S9(08) Binary.
+040300     05  Char-Fld           Pic  X(08) Value "CHAR".
+040400     05  Cond-Fld           Pic  X(08) Value "COND".
+040500     05  Fixed-Fld          Pic  X(08) Value "FIXED".
+040600     05  Copy-Fld           Pic  X(08) Value "(COPY)".
+040700     05  Share-Fld          Pic  X(08) Value "SHARE".
+040800     05  Write-Fld          Pic  X(08) Value "WRITE".
+040900     05  Prof-DD-Fld        Pic  X(08) Value "ISPPROF".
+041000     05  Locate-Fld         Pic  X(08) Value "LOCATE".
+041100     05  Move-Fld           Pic  X(08) Value "MOVE".
+041200     05  Control-1          Pic  X(08) Value "CONTROL".
+041300     05  Save-Fld           Pic  X(08) Value "SAVE".
+041400     05  Restore-Fld        Pic  X(08) Value "RESTORE".
+041500     05  Table-Vars-Fld     Pic  X(08) Value "EPRFTVAR".
+041600     05  Nbr-Row-Fld        Pic  X(08) Value "EPRFNROW".
+041700     05  Cursor-Fld         Pic  X(08) Value Spaces.
+041800 01  ISPF-Panel-Names.
+041900     05  EPRFMAIN           Pic  X(08) Value "EPRFMAIN".
+042000     05  EPRFCOND           Pic  X(08) Value "EPRFCOND".
+042100     05  EPRFDETL           Pic  X(08) Value "EPRFDETL".
+042200     05  EPRFLERR           Pic  X(08) Value "EPRFLERR".
+042300 01  ISPF-Message-Names.
+042400     05  Invalid-ZCMD       Pic  X(08) Value "ISRE176".
+042500     05  Invalid-Recovery   Pic  X(08) Value "EPRF000".
+042600     05  Invalid-Profile    Pic  X(08) Value "EPRF001".
+042700     05  Invalid-Caps       Pic  X(08) Value "EPRF002".
+042800     05  Invalid-Note       Pic  X(08) Value "EPRF003".
+042900     05  Invalid-Hex        Pic  X(08) Value "EPRF004".
+043000     05  Invalid-Pack       Pic  X(08) Value "EPRF005".
+043100     05  Invalid-Nulls      Pic  X(08) Value "EPRF006".
+043200     05  Invalid-Number     Pic  X(08) Value "EPRF007".
+043300     05  Invalid-Stats      Pic  X(08) Value "EPRF008".
+043400     05  Invalid-Tabs       Pic  X(08) Value "EPRF009".
+043500     05  Invalid-AutoNum    Pic  X(08) Value "EPRF009A".
+043600     05  Invalid-AutoList   Pic  X(08) Value "EPRF009B".
+043700     05  Invalid-AutoSave   Pic  X(08) Value "EPRF009C".
+043800     05  Too-Many-Parms     Pic  X(08) Value "EPRF009E".
+043900     05  Invalid-Hi-Parm    Pic  X(08) Value "EPRF009F".
+044000     05  Profile-Updated    Pic  X(08) Value "EPRF009G".
+044100     05  Exceeds-Max-Rows   Pic  X(08) Value "EPRF009H".
+044200     05  Invalid-IMAC-Name  Pic  X(08) Value "EPRF009I".
+044300     05  Invalid-Parm-Value Pic  X(08) Value "EPRF009J".
+044400     05  Missing-IMAC-Name  Pic  X(08) Value "EPRF009K".
+044500     05  Missing-Parm-Value Pic  X(08) Value "EPRF009L".
+044600     05  LE-Error           Pic  X(08) Value "EPRF009M".
+044700     05  S806-Error         Pic  X(08) Value "EPRF009N".
+044800 01  ISPF-Table-Names.
+044900     05  Edit-Profile-Table Pic  X(08) Value Spaces.
+045000 01  Called-SubRoutines.
+045100     05  Isplink            Pic  X(08) Value "ISPLINK".
+045200     05  Viewup03           Pic  X(08) Value "VIEWUP03".
+045300     05  Clcaup01           Pic  X(08) Value "CLCAUP01".
+045400     05  CeeTest            Pic  X(08) Value "CEETEST".
+045500     05  CeeGtst            Pic  X(08) Value "CEEGTST".
+045600     05  Ceefrst            Pic  X(08) Value "CEEFRST".
+045700 01  String-Of-Commands.
+045800     05  Command-String-Ln  Pic S9(04) Binary.
+045900     05  Command-String     Pic  X(36) Value
+046000     "Monitor List Function-Pool-Variables".
+046100 01  String-Smoother-Area.
+046200     05  String-To-Compress Pic X(133).
+046300     05  Length-of-String   Pic  9(03).
+046400     05  Returned-Length    Pic S9(03) Packed-Decimal.
+046500     05  Space-Or-Not       Pic  X(01) Value "Y".
+046600         88  Leave-One-Space           Value "Y".
+046700 01  Numeric-Edit-Flds.
+046800     05  Long-Edit          Pic  ZZZ,ZZZ,ZZ9.
+046900     05  Short-Edit         Pic  Z9.
+047000     05  Medium-Edit        Pic  ZZZ9.
+047100 01  Hi-Lite-String.
+047200     05  HLS-On-Off         Pic  X(04).
+047300     05  HLS-Type           Pic  X(05).
+047400     05  HLS-Paren          Pic  X(06).
+047500     05  HLS-Cursor         Pic  X(07).
+047600     05  HLS-Find           Pic  X(05).
+047700/
+047800 Linkage Section.
+047900 01  Run-Time-Parm.
+048000     05  RT-Parm-Length     Pic S9(04) Binary.
+048100     05                     Pic  X(01).
+048200         88  Debug-Run                 Value "D".
+048300 01  Dynamic-Area           Pic  X(8000).
+048400 01                         Redefines Dynamic-Area.
+048500     05  A-Screen-Line      Occurs 100 Times,
+048600                            Indexed By DA-IX.
+048700         10  Attr-Byte1     Pic  X(01).
+048800         10  Line-CMD       Pic  X(01).
+048900         10  Attr-Byte2     Pic  X(01).
+049000         10  Prof-Type      Pic  X(29).
+049100         10  I-Macro        Pic  X(09).
+049200         10  Key-Settings   Pic  X(39).
+049300 01  Work-Dynamic-Area      Pic  X(8000).
+049400 01                         Redefines Work-Dynamic-Area.
+049500     05  An-80-Byte-Line    Occurs 100 Times,
+049600                            Indexed By WA-IX.
+049700         10  Sel-Byte1      Pic  X(01).
+049800         10  Action-Byte    Pic  X(01).
+049900             88  Delete-Row             Values "D" "d".
+050000             88  Display-Row            Values "S" "s".
+050100             88  No-Action              Value Space.
+050200         10  Sel-Byte2      Pic  X(01).
+050300         10  Work-Prof-Type Pic  X(29).
+050400         10                 Pic  X(48).
+050500/
+050600 Procedure Division Using Run-Time-Parm.
+050700     Perform 1000-Initialize                     Thru 1000-Exit.
+050800     Perform 2000-All-Processing                 Thru 2000-Exit
+050900             Until Finished.
+051000     Perform 9000-Finalize                       Thru 9000-Exit.
+051100     GoBack.
+051200
+051300 1000-Initialize.
+051400     Move Length Of FP-Address      To Len-Fld.
+051500     Call Isplink Using Vdefine Vdef-L8-Lit
+051600                           FP-8-Byte-Fields Char-fld
+051700                           Len-Fld Copy-Fld
+051800        On Exception
+051900          Move Isplink To EPRFEPGM
+052000          Perform 1220-S806-Trapped-Error        Thru 1220-Exit
+052100     End-Call.
+052200
+052300     If Debug-Run And Not Finished
+052400        Move Length Of Command-String To Command-String-Ln
+052500        Call CeeTest Using String-Of-Commands
+052600                              Feedback-Codes
+052700            On Exception
+052800              Move CeeTest  To EPRFEPGM
+052900              Perform 1220-S806-Trapped-Error    Thru 1220-Exit
+053000        End-Call
+053100        Call Viewup03 Using Function-Pool-Variables,
+053200                              FP-Address
+053300            On Exception
+053400              Move Viewup03 To EPRFEPGM
+053500              Perform 1220-S806-Trapped-Error    Thru 1220-Exit
+053600        End-Call.
+053700
+053800     If Finished
+053900        Next Sentence
+054000     Else
+054100     Move Length Of ZGE             To Len-Fld
+054200     Call Isplink Using Vdefine Vdef-L3-Lit
+054300                           FP-3-Byte-Fields Char-fld
+054400                           Len-Fld Copy-Fld
+054500     Move Length Of ZEDPLRCL        To Len-Fld
+054600     Call Isplink Using Vdefine Vdef-L4-LitFix
+054700                           FP-4-Byte-FixFlds Fixed-Fld
+054800                           Len-Fld Copy-Fld
+054900     Move Length Of ZAPPLID         To Len-Fld
+055000     Call Isplink Using Vdefine Vdef-L4-Lit
+055100                           FP-4-Byte-Fields Char-Fld
+055200                           Len-Fld Copy-Fld
+055300     Move Length Of ZEDPTABC        To Len-Fld
+055400     Call Isplink Using Vdefine Vdef-L1-Lit
+055500                           FP-1-Byte-Fields Char-fld
+055600                           Len-Fld Copy-Fld
+055700     Move Length Of ZEDPFLAG        To Len-Fld
+055800     Call Isplink Using Vdefine Vdef-L24-Lit
+055900                           FP-24-Byte-Fields Char-fld
+056000                           Len-Fld Copy-Fld
+056100     Move Length Of EP-Recover      To Len-Fld
+056200     Call Isplink Using Vdefine Vdef-L26-Lit
+056300                           FP-26-Byte-Fields Char-fld
+056400                           Len-Fld
+056500     Move Length Of Detail-Header   To Len-Fld
+056600     Call Isplink Using Vdefine Vdef-L30-Lit
+056700                           FP-30-Byte-Fields Char-fld
+056800                           Len-Fld Copy-Fld
+056900     Move Length Of ZCMD            To Len-Fld
+057000     Call Isplink Using Vdefine Vdef-L60-Lit
+057100                           FP-60-Byte-Fields Char-fld
+057200                           Len-Fld Copy-Fld
+057300     Move Length Of ZEDPMASK        To Len-Fld
+057400     Call Isplink Using Vdefine Vdef-L80-Lit
+057500                           FP-80-Byte-Fields Char-fld
+057600                           Len-Fld Copy-Fld
+057700     Move Length Of EPRFTVAR        To Len-Fld
+057800     Call Isplink Using Vdefine Vdef-L256-Lit
+057900                           FP-256-Byte-Fields Char-fld
+058000                           Len-Fld
+058100     Move ZAPPLID    To Edit-Profile-Table
+058200     Inspect Edit-Profile-Table
+058300         Replacing First "    " By "EDIT"
+058400     Move Length of Dynamic-Area      To DYN-Area-Length
+058500     Move Length of Work-Dynamic-Area To Work-DYN-Area-Length
+058600     Compute Max-Dynarea-Rows = (Length of Dynamic-Area /
+058700            Length of A-Screen-Line (1))
+058800     Perform 1200-Get-Stg-and-Table              Thru 1200-Exit.
+058900 1000-Exit. Exit.
+059000/
+059100 1100-String-Header.
+059200     Move "Line "            To Panel-Header.
+059300     Move Top-Row            To Short-Edit.
+059400     Move Short-Edit         To Panel-Header (6:2).
+059500     Move " of "             To Panel-Header (9:4).
+059600     Move Number-of-Rows     To Short-Edit.
+059700     Move Short-Edit         To Panel-Header (14:2).
+059800     Move Panel-Header       To String-To-Compress.
+059900     Move 18                 To Length-of-String.
+060000     Set Leave-One-Space     To True.
+060100     Call Clcaup01 Using String-Smoother-Area.
+060200     Move String-To-Compress To Panel-Header.
+060300 1100-Exit. Exit.
+060400/
+060500 1200-Get-Stg-and-Table.
+060600     Call Isplink Using TBOpen Edit-Profile-Table
+060700                          Write-Fld Prof-DD-Fld Share-Fld.
+060800
+060900     If Return-Code > 4
+061000        Move "Y" To Finished-SW
+061100     Else
+061200     Call Isplink Using Tbquery Edit-Profile-Table
+061300                          Omitted Table-Vars-Fld Nbr-Row-Fld
+061400     If EPRFNROW > Max-Dynarea-Rows
+061500        Call Isplink Using Setmsg Exceeds-Max-Rows
+061600     End-If
+061700     Call CeeGtst Using Heap-0 DYN-Area-Length
+061800                          DYN-Area-Pointer Feedback-Codes
+061900        On Exception
+062000           Move CeeGtst  To EPRFEPGM
+062100           Perform 1220-S806-Trapped-Error       Thru 1220-Exit
+062200           If Finished
+062300             Next Sentence
+062400           End-If
+062500     End-Call
+062600     If FC-Severity = Zeros
+062700       Call CeeGtst Using Heap-0 Work-DYN-Area-Length
+062800                            Work-DYN-Area-Pointer Feedback-Codes
+062900       If FC-Severity NOT = Zeros
+063000          Perform 1210-LE-GTST-Error             Thru 1210-Exit
+063100       Else
+063200       Set Address of Dynamic-Area      To DYN-Area-Pointer
+063300       Set Address of Work-Dynamic-Area To Work-DYN-Area-Pointer
+063400       Move Spaces                      To Dynamic-Area,
+063500                                           Work-Dynamic-Area
+063600       Move 1                           To Top-Row
+063700       Call Isplink Using TBTop Edit-Profile-Table
+063800       Call Isplink Using TBSkip Edit-Profile-Table
+063900                            Omitted Table-Vars-Fld
+064000       Perform Varying DA-IX From 1 By 1
+064100       Until Return-Code > Zero Or DA-IX > Max-Dynarea-Rows
+064200         Move X"04"     To Attr-Byte1  (DA-IX)
+064300         Move X"01"     To Attr-Byte2  (DA-IX)
+064400         Move ZEDPTYPE  To String-To-Compress
+064500         Move "("       To String-To-Compress (10:1)
+064600         Evaluate True
+064700            When Fixed-Lrecl
+064800               Move "Fixed   " To String-To-Compress (11:8)
+064900            When Variable-Lrecl
+065000               Move "Variable" To String-To-Compress (11:8)
+065100         End-Evaluate
+065200         Move "-"       To String-To-Compress (20:1)
+065300         Move ZEDPLRCL  To Long-Edit
+065400         Move Long-Edit To String-To-Compress (22:11)
+065500         Move ")"       To String-To-Compress (33:1)
+065600         Move 36             To Length-of-String
+065700         Set Leave-One-Space To True
+065800         Call Clcaup01 Using String-Smoother-Area
+065900          On Exception
+066000             Move Clcaup01 To EPRFEPGM
+066100             Perform 1220-S806-Trapped-Error     Thru 1220-Exit
+066200             If Finished
+066300               Next Sentence
+066400             End-If
+066500         End-Call
+066600         Move String-To-Compress To Prof-Type (DA-IX)
+066700         Perform 1400-String-Key-Items           Thru 1400-Exit
+066800         Call Isplink Using TBSkip Edit-Profile-Table
+066900                             Omitted Table-Vars-Fld
+067000       End-Perform
+067100       Set Number-of-Rows To DA-IX
+067200       Subtract 1 From Number-Of-Rows
+067300       Perform 1100-String-Header                Thru 1100-Exit
+067400       Move Length Of Dynamic-Area    To Dyna1-Len-Fld
+067500       Call Isplink Using Vreplace Vrep-DYN-Lit
+067600                             Dyna1-Len-Fld Dynamic-Area
+067700       Call Isplink Using AddPop
+067800     Else
+067900     Perform 1210-LE-GTST-Error                  Thru 1210-Exit.
+068000 1200-Exit. Exit.
+068100
+068200 1210-LE-GTST-Error.
+068300     Move "CEEGTST - RC =" To String-Smoother-Area.
+068400     Move FC-Severity      To Medium-Edit.
+068500     Move Medium-Edit      To String-Smoother-Area (16:4).
+068600     Set Leave-One-Space   To True.
+068700     Call Clcaup01 Using String-Smoother-Area.
+068800     Move String-Smoother-Area To EPRFGMSG.
+068900     Move "Y" To Finished-SW.
+069000     Call Isplink Using SetMsg LE-Error.
+069100 1210-Exit. Exit.
+069200
+069300 1220-S806-Trapped-Error.
+069400     Move "Y" To Finished-SW.
+069500     Call Isplink Using SetMsg S806-Error Cond-Fld.
+069600 1220-Exit. Exit.
+069700
+069800 1300-Free-STG-Close-Table.
+069900     Call Isplink Using RemPop.
+070000     Call Isplink Using TBClose Edit-Profile-Table
+070010                  Omitted Omitted Omitted Prof-DD-Fld.
+070100     Call CeeFrst Using DYN-Area-Pointer Feedback-Codes.
+070200     Call CeeFrst Using Work-DYN-Area-Pointer Feedback-Codes.
+070300 1300-Exit. Exit.
+070400/
+070500 1400-String-Key-Items.
+070600     Evaluate True
+070700        When ZEDPIMAC = Spaces
+070800           Move "-None-"   To I-Macro (DA-IX)
+070900        When ZEDPIMAC NOT = Spaces
+071000           Move ZEDPIMAC   To I-Macro (DA-IX)
+071100     End-Evaluate.
+071200
+071300     Evaluate True
+071400     When Recovery-On
+071500         Move "On"       To String-To-Compress
+071600     When Rec-Off-Nowarn
+071700         Move "OffNoWrn" To String-To-Compress
+071800     When Rec-Off-Warn
+071900         Move "OffWarn"  To String-To-Compress
+072000     End-evaluate.
+072100
+072200     If Stats-On
+072300         Move "On"       To String-To-Compress (10:2)
+072400     Else
+072500     Move "Off"          To String-To-Compress (10:3).
+072600
+072700     If Caps-On
+072800         Move "On"       To String-To-Compress (16:2)
+072900     Else
+073000     Move "Off"           To String-To-Compress (16:3).
+073100
+073200     Move "Off"           To String-To-Compress (21:3).
+073300
+073400     If Nulls-On-STD
+073500         Move "OnStd"     To String-To-Compress (21:5).
+073600
+073700     If Nulls-On-ALL
+073800         Move "OnAll"     To String-To-Compress (21:5).
+073900
+074000     Move "Off"           To String-To-Compress (27:3).
+074100
+074200     If Numbering-ON
+074300       Move "On"          To String-To-Compress (27:2)
+074400       If Numbering-ON-STD
+074500         Move "OnStd"     To String-To-Compress (27:5)
+074600         IF Numbering-ON-COB
+074700            Move "OnStdC" To String-To-Compress (27:6)
+074800         Else
+074900         Next Sentence
+075000       Else
+075100       If Numbering-ON-COB
+075200         Move "OnCob"    To String-To-Compress (28:5).
+075300
+075400     If HiLite-On
+075500         Move "On"      To String-To-Compress (34:2)
+075600     Else
+075700     Move "Off"         To String-To-Compress (34:3).
+075800
+075900     Move String-To-Compress To Key-Settings (DA-IX).
+076000 1400-Exit. Exit.
+076100/
+076200 2000-All-Processing.
+076300     Move Zero To Row-Del-SW, Row-Mod-SW.
+076400     Call Isplink Using Display-P EPRFMAIN.
+076500
+076600     If Return-Code > Zeros
+076700       Move "Y" To Finished-SW
+076800     Else
+076900     Call Isplink Using Vget Panel-Vars
+077000     Call Isplink Using VCopy Vrep-DYN-Lit Dyna1-Len-Fld
+077100                          DYN-Area-Pointer-1 Locate-Fld
+077200     Set Address of Work-Dynamic-Area To DYN-Area-Pointer-1
+077300     Compute Max-Work-Row =
+077400       (Dyna1-Len-Fld / Length of An-80-Byte-Line (1)) + 1
+077500     Move Spaces To Unstring-Area
+077600     Unstring ZCMD Delimited by Spaces
+077700          Into Command-Area, Parm-Area, Xtra-Stuff
+077800     If Recovery-ALL
+077900       If On-Parm Or Off-Parm
+078000          If Off-Parm And Xtra-Stuff = Spaces
+078100             Move "WARN" To Xtra-Stuff
+078200          End-If
+078300          Perform 4100-Roll-In-All               Thru 4100-Exit
+078400          Perform 1300-Free-STG-Close-Table      Thru 1300-Exit
+078500          Perform 1200-Get-Stg-and-Table         Thru 1200-Exit
+078600          Move Spaces to ZCMD
+078700       Else
+078800       Move 7 To Return-Code
+078900     Else
+079000     If Xtra-Stuff NOT = Spaces
+079100       CALL Isplink USING SetMsg Too-Many-Parms
+079200     Else
+079300     If Refresh-Table
+079400       Perform 1300-Free-STG-Close-Table         Thru 1300-Exit
+079500       Perform 1200-Get-Stg-and-Table            Thru 1200-Exit
+079600       Move Spaces to ZCMD
+079700     Else
+079800     If HiLite-All
+079900       If Paren-Parm OR Find-Parm OR Cursor-Parm OR Auto-Parm
+080000       Or Off-Parm Or On-Parm
+080100          Perform 4100-Roll-In-All               Thru 4100-Exit
+080200          Perform 1300-Free-STG-Close-Table      Thru 1300-Exit
+080300          Perform 1200-Get-Stg-and-Table         Thru 1200-Exit
+080400          Move Spaces to ZCMD
+080500       Else
+080600       CALL Isplink USING SetMsg Invalid-Hi-Parm
+080700     Else
+080800     If I-MAC-All
+080900        If Parm-Area Not = Spaces
+081000           Move Parm-Area To Edit-ZEDPIMAC
+081100           Perform 5400-Edit-IMAC-Name           Thru 5400-Exit
+081200           If Return-Code = 9
+081300             Next Sentence
+081400           End-If
+081500           If Remove-IMAC
+081600              Move Spaces To Parm-Area
+081700           End-If
+081800           Perform 4100-Roll-In-All              Thru 4100-Exit
+081900           Perform 1300-Free-STG-Close-Table     Thru 1300-Exit
+082000           Perform 1200-Get-Stg-and-Table        Thru 1200-Exit
+082100           Move Spaces to ZCMD
+082200        Else
+082300        Move 6 To Return-Code
+082400     Else
+082500     If Stats-All Or Pack-All   Or Caps-All
+082600     Or Nulls-All Or Number-All
+082700       If On-Parm Or Off-Parm
+082800          Perform 4100-Roll-In-All               Thru 4100-Exit
+082900          Perform 1300-Free-STG-Close-Table      Thru 1300-Exit
+083000          Perform 1200-Get-Stg-and-Table         Thru 1200-Exit
+083100          Move Spaces to ZCMD
+083200       Else
+083300       If Parm-Area Not = Spaces
+083400          Move 7 To Return-Code
+083500       Else
+083600       Move 5    To Return-Code
+083700     Else
+083800     If ZCMD Not = Spaces
+083900        CALL Isplink USING SetMsg Invalid-ZCMD
+084000     Else
+084100     Perform Varying WA-IX From 1 By 1
+084200        Until WA-IX > Max-Work-Row
+084300       Evaluate True
+084400         When Delete-Row (WA-IX)
+084500            Perform 3000-Determine-Which-Row     Thru 3000-Exit
+084600            Perform 4000-Locate-Table-Row        Thru 4000-Exit
+084700            If Return-Code = Zero
+084800              Call Isplink Using Control-1 Display-P Save-Fld
+084900              Call Isplink Using AddPop
+085000              Call Isplink Using Display-P EPRFCOND
+085100              If Return-Code = Zeros
+085200                 Call Isplink Using TBDelete Edit-Profile-Table
+085300                 If Return-Code = Zeros
+085400                    Set Row-Deleted To True
+085500                 End-If
+085600                 Perform 2100-Reset-Line-Command Thru 2100-Exit
+085700              End-If
+085800              If NOT Row-Deleted
+085900                 Perform 2100-Reset-Line-Command Thru 2100-Exit
+086000              End-If
+086100            End-If
+086200         When Display-Row (WA-IX)
+086300            Move Work-Prof-Type (WA-IX) To Detail-Header
+086400            Perform 3000-Determine-Which-Row     Thru 3000-Exit
+086500            Perform 4000-Locate-Table-Row        Thru 4000-Exit
+086600            If Return-Code = Zero
+086700              Perform 5000-Xlate-Flags-To-Text   Thru 5000-Exit
+086800              Call Isplink Using Control-1 Display-P Save-Fld
+086900              Call Isplink Using AddPop
+087000              Move Zeros To Changes-Made
+087100              Move ZEDPIMAC To Work-ZEDPIMAC
+087200              Perform Until Return-Code > Zero
+087300                Call Isplink Using Display-P EPRFDETL
+087400                                   Omitted Cursor-Fld
+087500                Move Spaces To Cursor-Fld
+087600                If Cancel-CMD Or Return-Code > Zero
+087700                   If Return-Code > Zeros
+087800                     Perform 5100-Change-Profile Thru 5100-Exit
+087900                     Evaluate True
+088000                      When Changes-Made = Zeros
+088100                        Move 1      To Return-Code
+088200                        Move Spaces To ZCMD
+088300                      When Changes-Made > Zeros
+088400                        Perform 5300-Mod-Table   Thru 5300-Exit
+088500                        If Return-Code = Zeros
+088600                         Move Work-Prof-Type (WA-IX) To EPRFGMSG
+088700                         Call Isplink Using SetMsg Profile-Updated
+088800                         Move 2 To Return-Code
+088900                        End-If
+089000                      End-Evaluate
+089100                   Else
+089200                   If Cancel-CMD
+089300                     Move 1      To Return-Code
+089400                     Move Spaces To ZCMD
+089500                   End-If
+089600                Else
+089700                Perform 5100-Change-Profile      Thru 5100-Exit
+089800                End-If
+089900              End-Perform
+090000              Perform 2100-Reset-Line-Command    Thru 2100-Exit
+090100            End-If
+090200         When No-Action (WA-IX)
+090300              Continue
+090400         When Other
+090500              Call Isplink Using Control-1 Display-P Save-Fld
+090600              Call Isplink Using AddPop
+090700              Move Quote To Generic-Error (1:1),
+090800                          Generic-Error (3:1)
+090900              Move Action-Byte (WA-IX) To Generic-Error (2:1)
+091000              Move " - Invalid Line Command" To Generic-Error (4:)
+091100              Call Isplink Using Display-P EPRFLERR
+091200              Perform 2100-Reset-Line-Command    Thru 2100-Exit
+091300       End-Evaluate
+091400     End-Perform
+091500     If Scroll-Down
+091600        If Max-Parm
+091700          Move Number-Of-Rows To Top-Row, ZSCROLLN
+091800        End-If
+091900        Compute Top-Row = ZSCROLLN + Top-Row
+092000        If Top-Row > Number-of-Rows
+092100           Move Number-of-Rows To Top-Row
+092200        End-If
+092300        Set DA-IX  To Top-Row
+092400        Perform 1100-String-Header               Thru 1100-Exit
+092500        Compute Dyna1-Len-Fld =
+092600        ((Number-Of-Rows - Top-Row) + 1) *
+092700        Length of A-Screen-Line (1)
+092800        Call Isplink Using Vreplace Vrep-DYN-Lit
+092900                              Dyna1-Len-Fld A-Screen-Line (DA-IX)
+093000     Else
+093100     If Scroll-Up
+093200        If Max-Parm
+093300          Move 1              To Top-Row
+093400          Move Zeros          To ZSCROLLN
+093500        End-If
+093600        Compute Top-Row = Top-Row - ZSCROLLN
+093700        If Top-Row < 1
+093800           Move 1 To Top-Row
+093900        End-If
+094000        Set DA-IX To Top-Row
+094100        Perform 1100-String-Header               Thru 1100-Exit
+094200        Compute Dyna1-Len-Fld =
+094300        ((Number-Of-Rows - Top-Row) + 1) *
+094400        Length of A-Screen-Line (1)
+094500        Call Isplink Using Vreplace Vrep-DYN-Lit
+094600                              Dyna1-Len-Fld A-Screen-Line (DA-IX).
+094700
+094800     If Return-Code = 9
+094900        Move Zeros To Return-Code
+095000        Call Isplink Using Setmsg Invalid-IMAC-Name
+095100     Else
+095200     If Return-Code = 7
+095300        Move Zeros To Return-Code
+095400        Call Isplink Using Setmsg Invalid-Parm-Value
+095500     Else
+095600     If Return-Code = 6
+095700        Move Zeros To Return-Code
+095800        Call Isplink Using Setmsg Missing-Imac-Name
+095900     Else
+096000     If Return-Code = 5
+096100        Move Zeros To Return-Code
+096200        Call Isplink Using Setmsg Missing-Parm-Value.
+096300
+096400     If Row-Deleted Or Row-Modified
+096500       Perform 1300-Free-STG-Close-Table         Thru 1300-Exit
+096600       Perform 1200-Get-Stg-and-Table            Thru 1200-Exit.
+096700 2000-Exit. Exit.
+096800
+096900 2100-Reset-Line-Command.
+097000     Move X"04"     To Sel-Byte1   (WA-IX).
+097100     Move X"01"     To Sel-Byte2   (WA-IX).
+097200     Move Space     To Action-Byte (WA-IX).
+097300     Call Isplink Using RemPop.
+097400     Call Isplink Using Control-1 Display-P Restore-Fld.
+097500 2100-Exit. Exit.
+097600/
+097700 3000-Determine-Which-Row.
+097800     Move Zeros To Tally.
+097900     Inspect Work-Prof-Type (WA-IX) Tallying Tally
+098000        For Characters Before Initial Space.
+098100
+098200     Move Work-Prof-Type (WA-IX) (1:Tally) To Profile-Type.
+098300     Add 3 To Tally.
+098400     Move Work-Prof-Type (WA-IX) (Tally:1) To Profile-F-V.
+098500
+098600     If Profile-F-V = "V"
+098700        Add 11 To Tally
+098800     Else
+098900     Add 8 To Tally.
+099000
+099100     Move Zeros To Beg-Pos.
+099200     Inspect Work-Prof-Type (WA-IX) (Tally:) Tallying Beg-Pos
+099300        For Characters Before Initial ")".
+099400
+099500     Move Zeros  To Long-Edit.
+099600
+099700     Evaluate True
+099800        When Beg-Pos = 1
+099900           Move Work-Prof-Type (WA-IX) (Tally:Beg-Pos)
+100000           To Numeric-Edit-Flds (11:1)
+100100        When Beg-Pos = 2
+100200           Move Work-Prof-Type (WA-IX) (Tally:Beg-Pos)
+100300           To Numeric-Edit-Flds (10:2)
+100400        When Beg-Pos = 3
+100500           Move Work-Prof-Type (WA-IX) (Tally:Beg-Pos)
+100600           To Numeric-Edit-Flds (9:3)
+100700        When Beg-Pos = 5
+100800           Move Work-Prof-Type (WA-IX) (Tally:Beg-Pos)
+100900           To Numeric-Edit-Flds (7:5)
+101000        When Beg-Pos = 6
+101100           Move Work-Prof-Type (WA-IX) (Tally:Beg-Pos)
+101200           To Numeric-Edit-Flds (6:6).
+101300
+101400     Move Long-edit To Profile-Lrecl.
+101500 3000-Exit. Exit.
+101600
+101700 4000-Locate-Table-Row.
+101800     Call Isplink Using TBTop Edit-Profile-Table.
+101900     Call Isplink Using TBSkip Edit-Profile-Table
+102000                             Omitted Table-Vars-Fld.
+102100     Perform
+102200       Until Return-Code NOT = Zero
+102300             OR
+102400          (ZEDPTYPE = Profile-Type
+102500       And ZEDPRCFM = Profile-F-V
+102600       And ZEDPLRCL = Profile-Lrecl)
+102700        Call Isplink Using TBSkip Edit-Profile-Table
+102800                             Omitted Table-Vars-Fld
+102900     End-Perform.
+103000
+103100     If (ZEDPTYPE = Profile-Type
+103200     And ZEDPRCFM = Profile-F-V
+103300     And ZEDPLRCL = Profile-Lrecl)
+103400       Move Zeros To Return-Code
+103500     Else
+103600     Move 1       To Return-Code.
+103700 4000-Exit. Exit.
+103800
+103900 4100-Roll-In-All.
+104000     Call Isplink Using TBTop Edit-Profile-Table.
+104100     Call Isplink Using TBSkip Edit-Profile-Table
+104200                             Omitted Table-Vars-Fld.
+104300
+104400     Perform
+104500       Until Return-Code NOT = Zero
+104600        Evaluate True
+104700          When I-MAC-All
+104800              Move Parm-Area To ZEDPIMAC
+104900          When Stats-All
+105000             If On-Parm
+105100                Move A-One  To Z-Stats
+105200             End-If
+105300             If Off-Parm
+105400                Move Zero   To Z-Stats
+105500             End-If
+105600          When Recovery-ALL
+105700             If On-Parm
+105800                Move A-One  To Z-Recovery
+105900                Move Zero   To Z-Rec-Warn
+106000             End-If
+106100             If Off-Parm And Warn-Parm
+106200                Move Zero   To Z-Recovery,
+106300                               Z-Rec-Warn
+106400             End-If
+106500             If Off-Parm And NoWarn-Parm
+106600                Move Zero   To Z-Recovery
+106700                Move A-One  To Z-Rec-Warn
+106800             End-If
+106900          When Nulls-All
+107000             If On-Parm
+107100                Move A-One  To Z-Nulls-Std
+107200             End-If
+107300             If Off-Parm
+107400                Move Zero   To Z-Nulls-Std
+107500             End-If
+107600          When Caps-All
+107700             If On-Parm
+107800                Move A-One  To Z-Caps
+107900             End-If
+108000             If Off-Parm
+108100                Move Zero   To Z-Caps
+108200             End-If
+108300          When Pack-All
+108400             If On-Parm
+108500                Move A-One  To Z-Pack
+108600             End-If
+108700             If Off-Parm
+108800                Move Zero   To Z-Pack
+108900             End-If
+109000          When Number-All
+109100             If On-Parm
+109200                Move "101" To ZEDPFLAG (10:3)
+109300             End-If
+109400             If Off-Parm
+109500                Move Zeros To ZEDPFLAG (10:3)
+109600             End-If
+109700          When HiLite-All
+109800             If On-Parm And ZEDPLRCL < 256
+109900                Move A-One  To ZEDPFLG2 (3:1)
+110000             End-If
+110100             If Off-Parm And ZEDPLRCL < 256
+110200                Move Zero   To ZEDPFLG2 (3:1), ZEDPFLG3 (8:1)
+110300             End-If
+110400             If Paren-Parm And ZEDPLRCL < 256
+110500                Move A-One  To ZEDPFLG2 (6:1)
+110600             End-If
+110700             If Find-Parm And ZEDPLRCL < 256
+110800                Move A-One  To ZEDPFLG2 (7:1)
+110900             End-If
+111000             If Cursor-Parm And ZEDPLRCL < 256
+111100                Move A-One  To ZEDPFLG2 (8:1)
+111200             End-If
+111300             If Auto-Parm And ZEDPLRCL < 256
+111400                Move A-One  To ZEDPFLG3 (8:1)
+111500             End-If
+111600        End-Evaluate
+111700        Call Isplink Using TBDelete Edit-Profile-Table
+111800        Call Isplink Using TBAdd Edit-Profile-Table,
+111900                                      EPRFTVAR
+112000        Call Isplink Using TBSkip Edit-Profile-Table
+112100                             Omitted Table-Vars-Fld
+112200     End-Perform.
+112300 4100-Exit. Exit.
+112400
+112500 5000-Xlate-Flags-To-Text.
+112600     If Recovery-On
+112700       Move "ON"              To EP-Recover
+112800     Else
+112900     If Rec-Off-Nowarn
+113000       Move "OFF NOWARN"      To EP-Recover
+113100     Else
+113200     If Rec-Off-Warn
+113300       Move "OFF WARN"        To EP-Recover.
+113400
+113500     Move "OFF"               To EP-Number.
+113600
+113700     If Numbering-ON
+113800       Move "ON"              To EP-Number
+113900       If Numbering-ON-STD
+114000         Move "ON STD"        To EP-Number
+114100         IF Numbering-ON-COB
+114200            Move "ON STD COB" To EP-Number
+114300         Else
+114400         Next Sentence
+114500       Else
+114600       If Numbering-ON-COB
+114700       Move "ON COB"          To EP-Number.
+114800
+114900     If Prof-Lock
+115000       Move "LOCK"            To EP-Profile
+115100     Else
+115200     Move "UNLOCK"            To EP-Profile.
+115300
+115400     If Caps-On
+115500       Move "ON"              To EP-Caps
+115600     Else
+115700       Move "OFF"             To EP-Caps.
+115800
+115900     If Note-On
+116000       Move "ON"              To EP-Note
+116100     Else
+116200     Move "OFF"               To EP-Note.
+116300
+116400     If Hex-On-DATA
+116500       Move "ON DATA"         To EP-HEX.
+116600
+116700     If Hex-On-VERT
+116800       Move "ON VERT"         To EP-Hex
+116900     Else
+117000     Move "OFF"               To EP-HEX.
+117100
+117200     If AutoList-On
+117300       Move "ON"              To EP-AutoList
+117400     Else
+117500     Move "OFF"               To EP-AutoList.
+117600
+117700     If AutoNum-On
+117800       Move "ON"              To EP-AutoNum
+117900     Else
+118000     Move "OFF"               To EP-AutoNum.
+118100
+118200     If Pack-On
+118300       Move "ON"              To EP-Pack
+118400     Else
+118500     Move "OFF"               To EP-Pack.
+118600
+118700     If Stats-On
+118800       Move "ON"              To EP-Stats
+118900     Else
+119000     Move "OFF"               To EP-Stats.
+119100
+119200     If Tabs-On-Using-Char
+119300       Move "ON <CHAR>"       To EP-Tabs
+119400     Else
+119500     If Tabs-On-ALL
+119600       Move "ON ALL"          To EP-Tabs
+119700     Else
+119800     If Tabs-On-STD
+119900       Move "ON STD"          To EP-Tabs
+120000     Else
+120100     Move "OFF"               To EP-Tabs.
+120200
+120300     If Nulls-On-ALL
+120400       Move "ON ALL"          To EP-Nulls
+120500     Else
+120600     If Nulls-On-STD
+120700       Move "ON STD"          To EP-Nulls
+120800     Else
+120900     Move "OFF"               To EP-Nulls.
+121000
+121100     If AutoSave-Off-P
+121200       Move "OFF PROMPT"      To EP-AutoSave
+121300     Else
+121400     If AutoSave-Off-NoP
+121500       Move "OFF NOPROMPT"    To EP-AutoSave
+121600     Else
+121700     Move "ON"                To EP-AutoSave.
+121800
+121900     Move Spaces            To Hi-Lite-String.
+122000
+122100     If HiLite-On
+122200        Move "ON"           To HLS-On-Off
+122300     Else
+122400     Move "OFF"             To HLS-On-Off.
+122500
+122600     If HiLite-DO-On And NOT HiLite-If-On
+122700        Move "DO"           To HLS-Type
+122800        Move "ON"           To HLS-On-Off
+122900     Else
+123000     If HiLite-If-On And NOT HiLite-Do-On
+123100        Move "IF"           To HLS-Type
+123200        Move "ON"           To HLS-On-Off
+123300     Else
+123400     If HiLite-If-On And HiLite-Do-On
+123500        Move "IFDO"         To HLS-Type
+123600        Move "ON"           To HLS-On-Off.
+123700
+123800     If HiLite-Paren-On
+123900       Move "PAREN"         To HLS-Paren.
+124000
+124100     If HiLite-Find-On
+124200       Move "FIND"          To HLS-Find.
+124300
+124400     If HiLite-Cursor-On
+124500       Move "CURSOR"        To HLS-Cursor.
+124600
+124700     If ZEDPLRCL > 255
+124800        Move "Not Supported-Lrecl > 255"   To EP-HiLite
+124900        Move Spaces                        To EP-HiLang
+125000        Move ZEDPMASK (4:75)               To EPRFMASK
+125100        Move ZEDPTABS (4:75)               To EPRFTABL
+125200     Else
+125300     Move ZEDPMASK                         To EPRFMASK
+125400     Move ZEDPTABS                         To EPRFTABL
+125500     Move Length Of Hi-Lite-String To Length-of-String
+125600     Set Leave-One-Space           To True
+125700     Move Hi-Lite-String           To String-To-Compress
+125800     Call Clcaup01 Using String-Smoother-Area
+125900     Move String-To-Compress       To EP-HiLite
+126000     If Automatic-Lang
+126100        Move "Auto-Language Detection"      To EP-HiLang
+126200     Else
+126300     If Assembler-Lang
+126400        Move "Assembler"                    To EP-HiLang
+126500     Else
+126600     If BookMaster-Lang
+126700        Move "BookMaster"                   To EP-HiLang
+126800     Else
+126900     If C-Lang
+127000        Move "C"                            To EP-HiLang
+127100     Else
+127200     If COBOL-Lang
+127300        Move "COBOL"                        To EP-HiLang
+127400     Else
+127500     If IDL-Lang
+127600        Move "IDL"                          To EP-HiLang
+127700     Else
+127800     If DTL-Lang
+127900        Move "Dialog Tag Language"          To EP-HiLang
+128000     Else
+128100     If Panel-Lang
+128200        Move "ISPF Panels"                  To EP-HiLang
+128300     Else
+128400     If Skel-Lang
+128500        Move "ISPF Skeletons"               To EP-HiLang
+128600     Else
+128700     If JCL-Lang
+128800        Move "JCL"                          To EP-HiLang
+128900     Else
+129000     If Pascal-Lang
+129100        Move "Pascal"                       To EP-HiLang
+129200     Else
+129300     If PL1-Lang
+129400        Move "PL/I"                         To EP-HiLang
+129500     Else
+129600     If REXX-Lang
+129700        Move "REXX"                         To EP-HiLang
+129800     Else
+129900     If Other-Lang
+130000        Move "Other"                        To EP-HiLang
+130100     Else
+130200     If Default-Lang
+130300        Move "Default"                      To EP-HiLang
+130400     Else
+130500     Move "Unknown Language Type"           To EP-HiLang.
+130600 5000-Exit. Exit.
+130700/
+130800 5100-Change-Profile.
+130900     If ZEDPIMAC Not = Spaces
+131000         Move ZEDPIMAC To Edit-ZEDPIMAC
+131100         Perform 5400-Edit-IMAC-Name             Thru 5400-Exit.
+131200
+131300     If Return-Code = 9
+131400        Move Zeros To Return-Code
+131500        Call Isplink Using Setmsg Invalid-IMAC-Name
+131600        Move "ZEDPIMAC" To Cursor-Fld
+131700     Else
+131800     Perform 5200-Move-New-Values                Thru 5200-Exit.
+131900 5100-Exit. Exit.
+132000
+132100 5200-Move-New-Values.
+132200     Move ZEDPFLAG To Work-ZEDPFLAG.
+132300     Move ZEDPFLG2 To Work-ZEDPFLG2.
+132400
+132500     If Set-Prof-Lock
+132600        Move A-One To Wk-ProfL
+132700     Else
+132800     If Set-Prof-UnLock
+132900        Move Zero  To Wk-ProfL.
+133000
+133100     If Set-Caps-On
+133200        Move A-One To Wk-Caps
+133300     Else
+133400     If Set-Caps-Off
+133500        Move Zero  To Wk-Caps.
+133600
+133700     If Set-Nulls-Off
+133800        Move Zero  To Wk-Nulls-Std, Wk-Nulls-All
+133900     Else
+134000     If Set-Nulls-On
+134100        Move A-One To Wk-Nulls-STD
+134200        Move Zero  To Wk-Nulls-All
+134300     Else
+134400     If Set-Nulls-ALL
+134500        Move A-One To Wk-Nulls-All
+134600        Move Zero  To Wk-Nulls-STD.
+134700
+134800     If Set-Stats-On
+134900        Move A-One To Wk-Stats
+135000     Else
+135100     If Set-Stats-Off
+135200        Move Zero  To Wk-Stats.
+135300
+135400     If Set-Pack-On
+135500        Move A-One To Wk-Pack
+135600     Else
+135700     If Set-Pack-Off
+135800        Move Zero  To Wk-Pack.
+135900
+136000     If Set-AutoN-On
+136100        Move A-One To Wk-AutoNum
+136200     Else
+136300     If Set-AutoN-Off
+136400        Move Zero  To Wk-AutoNum.
+136500
+136600     If Set-AutoL-On
+136700        Move A-One To Wk-AutoList
+136800     Else
+136900     If Set-AutoL-Off
+137000        Move Zero  To Wk-AutoList.
+137100
+137200     If Set-Rec-Off-Nowrn
+137300        Move A-One To Wk-Rec-Warn
+137400        Move Zero  To Wk-Recovery
+137500     Else
+137600     If Set-Rec-Off-Warn
+137700        Move Zero  To Wk-Rec-Warn, Wk-Recovery
+137800     Else
+137900     If Set-Rec-On
+138000        Move A-One To Wk-Recovery
+138100        Move Zero  To Wk-Rec-Warn.
+138200
+138300     If Set-Note-On
+138400        Move Zero  To Wk-Note
+138500     Else
+138600     If Set-Note-Off
+138700        Move A-One To Wk-Note.
+138800
+138900     If Set-Hex-Off
+139000        Move Zero  To Wk-Hex-Vert, Wk-Hex-Data
+139100     Else
+139200     If Set-Hex-On
+139300        Move A-One To Wk-Hex-Vert
+139400        Move Zero  To Wk-Hex-Data
+139500     Else
+139600     If Set-Hex-On-Data
+139700        Move Zero  To Wk-Hex-Vert
+139800        Move A-One To Wk-Hex-Data.
+139900
+140000     If Set-Nbr-Off
+140100        Move Zeros To Wk-Number-Setting
+140200     Else
+140300     If Set-Nbr-On
+140400        Move "101" To Wk-Number-Setting
+140500     Else
+140600     If Set-Nbr-On-COB
+140700        Move "110" To Wk-Number-Setting
+140800     Else
+140900     If Set-Nbr-On-Both
+141000        Move "111" To Wk-Number-Setting.
+141100
+141200     If Set-Tabs-Off
+141300        Move Zeros  To Wk-Tab-Setting
+141400     Else
+141500     If Set-Tabs-On
+141600        Move "100"  To Wk-Tab-Setting
+141700     Else
+141800     If Set-Tabs-On-All
+141900        Move "110"  To Wk-Tab-Setting
+142000     Else
+142100     If Set-Tabs-On-Char
+142200        Move "101"  To Wk-Tab-Setting.
+142300
+142400     If Set-AutoS-On
+142500        Move Zero   To Wk-AutoSave-NoP, Wk-AutoSave-P
+142600     Else
+142700     If Set-AutoS-Off-P
+142800        Move Zero   To Wk-AutoSave-NoP
+142900        Move A-One  To Wk-AutoSave-P
+143000     Else
+143100     If Set-AutoS-Off-NoP
+143200        Move A-One  To Wk-AutoSave-NoP
+143300        Move Zero   To Wk-AutoSave-P.
+143400
+143500     If  ZEDPFLAG = Work-ZEDPFLAG
+143600     And ZEDPFLG2 = Work-ZEDPFLG2
+143700     And ZEDPIMAC = Work-ZEDPIMAC
+143800        Next Sentence
+143900     Else
+144000     Perform 5500-What-Changed                   Thru 5500-Exit
+144100     Move Work-ZEDPFLAG To ZEDPFLAG
+144200     Move Work-ZEDPFLG2 To ZEDPFLG2
+144300     Move ZEDPIMAC      To Work-ZEDPIMAC.
+144400 5200-Exit. Exit.
+144500/
+144600 5300-Mod-Table.
+144700     Perform 4000-Locate-Table-Row               Thru 4000-Exit.
+144800
+144900     If Return-Code = Zeros
+145000       Call Isplink Using TBDelete Edit-Profile-Table
+145100       Call Isplink Using TBTop Edit-Profile-Table
+145200       Move Work-ZEDPFLAG To ZEDPFLAG
+145300       Move Work-ZEDPFLG2 To ZEDPFLG2
+145400       Move Work-ZEDPIMAC To ZEDPIMAC
+145500       Call Isplink Using TBAdd Edit-Profile-Table EPRFTVAR
+145600       If Return-Code <= 4
+145700         Set Row-Modified To True.
+145800 5300-Exit. Exit.
+145900
+146000 5400-Edit-IMAC-Name.
+146100     If Edit-ZEDPIMAC (1:1) Is Valid-1st-Char
+146200        Perform With Test After
+146300          Varying Tally from 2 by 1
+146400          Until Edit-ZEDPIMAC (Tally:1) = Space
+146500          Or Tally = Length of Edit-ZEDPIMAC
+146600          Or Return-Code = 9
+146700             If Edit-ZEDPIMAC (Tally:1) Is NOT Valid-Name-Char
+146800                Move 9 to Return-Code
+146900             End-If
+147000        End-Perform
+147100     Else
+147200     Move 9 To Return-Code.
+147300 5400-Exit. Exit.
+147400/
+147500 5500-What-Changed.
+147600     If Wk-ProfL Not = Z-ProfL
+147700        Add 1 To Changes-Made.
+147800
+147900     If Wk-Caps Not = Z-Caps
+148000        Add 1 To Changes-Made.
+148100
+148200     If Wk-Note Not = Z-Note
+148300        Add 1 To Changes-Made.
+148400
+148500     If Wk-Hex-Vert Not = Z-Hex-Vert
+148600        Add 1 To Changes-Made.
+148700
+148800     If Wk-Hex-Data Not = Z-Hex-Data
+148900        Add 1 To Changes-Made.
+149000
+149100     If Wk-Pack Not = Z-Pack
+149200        Add 1 To Changes-Made.
+149300
+149400     If Wk-Nulls-Std Not = Z-Nulls-Std
+149500        Add 1 To Changes-Made.
+149600
+149700     If Wk-Nulls-All Not = Z-Nulls-All
+149800        Add 1 To Changes-Made.
+149900
+150000     If Wk-Number-Disp Not = Z-Num-Disp
+150100        Add 1 To Changes-Made.
+150200
+150300     If Wk-Number-Setting (1:1) Not = Z-Num
+150400        Add 1 To Changes-Made.
+150500
+150600     If Wk-Number-Setting (2:1) Not = Z-NumCOB
+150700        Add 1 To Changes-Made.
+150800
+150900     If Wk-Number-Setting (3:1) Not = Z-NumStd
+151000        Add 1 To Changes-Made.
+151100
+151200     If Wk-Tab-Setting (1:1) Not = Z-Tabs-Std
+151300        Add 1 To Changes-Made.
+151400
+151500     If Wk-Tab-Setting (2:1) Not = Z-Tabs-All
+151600        Add 1 To Changes-Made.
+151700
+151800     If Wk-Tab-Setting (3:1) Not = Z-Tabs-Char
+151900        Add 1 To Changes-Made.
+152000
+152100     If Wk-Autonum Not = Z-Autonum
+152200        Add 1 To Changes-Made.
+152300
+152400     If Wk-Autolist Not = Z-Autolist
+152500        Add 1 To Changes-Made.
+152600
+152700     If Wk-Stats Not = Z-Stats
+152800        Add 1 To Changes-Made.
+152900
+153000     If Wk-Recovery Not = Z-Recovery
+153100        Add 1 To Changes-Made.
+153200
+153300     If Wk-AutoSave-NoP Not = Z-AutoSave-NoP
+153400        Add 1 To Changes-Made.
+153500
+153600     If Wk-AutoSave-P Not = Z-AutoSave-P
+153700        Add 1 To Changes-Made.
+153800
+153900     If Wk-Recovery  = Z-Recovery
+154000        Next Sentence
+154100     Else
+154200     If Wk-Recovery = Zero
+154300       If Wk-Rec-Warn Not = Z-Rec-Warn
+154400          Add 1 To Changes-Made.
+154500
+154600     If ZEDPIMAC Not = Work-ZEDPIMAC
+154700        Add 1 To Changes-Made.
+154800 5500-Exit. Exit.
+154900/
+155000 9000-Finalize.
+155100     If Edit-Profile-Table Not = Spaces
+155200        Perform 1300-Free-STG-Close-Table        Thru 1300-Exit.
+155300 9000-Exit. Exit.
+./ ADD NAME=EPRFCOND 0100-02231-02231-1300-00021-00021-00000-MOORE
+)ATTR
+ ! TYPE(INPUT) CAPS(OFF) JUST(LEFT)
+)BODY WINDOW(35,12)
++                                 +
+%Command ===>_ZCMD                +
+%                                 +
++ &TXT1                           +
++ &TXT2                           +
++                                 +
++ Type:%&ZEDPTYPE                 +
++Recfm:%&ZEDPRCFM                 +
++Lrecl:%&ZEDPLRCL                 +
++                                 +
++   Press%ENTER+to delete         +
++   Press%PF3 (END)+to cancel     +
+)INIT
+&ZWINTTL = 'Confirm Edit Profile Delete'
+&TXT1    = 'The &ZAPPLID Edit Profile Row shown'
+&TXT2    = 'below will be deleted'
+)PROC
+)END
+./ ADD NAME=EPRFDETL 0100-02231-02231-1300-00062-00062-00000-MOORE
+)ATTR
+ ! TYPE(INPUT) CAPS(ON) JUST(LEFT)
+ @ TYPE(OUTPUT) CAPS(OFF) INTENS(HIGH) COLOR(WHITE)
+)BODY WINDOW(47,20)
++                                             +
+%Command ===>_ZCMD                            +
++                                             +
++Recovery:!Z           +  Stats:!Z            +
++   Nulls:!Z           +   Caps:!Z            +
++  Number:!Z           +    Hex:!Z            +
++AutoSave:!Z           +   Pack:!Z            +
++ Profile:!Z           +   Tabs:!Z            +
++AutoList:!Z           +   Note:!Z            +
++ AutoNum:!Z           + IMacro:!ZEDPIMAC+    +
++-----------Display Only----------------------+
++  HiLite:@EPRFHILT                           +
++  HiLang:@EPRFLANG                           +
++Tab Character:@ZEDPTABC+                     +
++     Left BND:@ZEDPBNDL+Right BND:@ZEDPBNDR+ +
++         Mask:@EPRFMASK                      +
++ Tab Settings:@EPRFTABL                      +
++---------------------------------------------+
++  Overtype Input Fields to Change Settings   +
+%  PF3=End/Save, Enter=Modify, Cancel=NoSave  +
+)INIT
+&ZWINTTL = 'Edit Settings For &DHEADER'
+.ZVARS = '(EPRFRECY,EPRFSTAT,EPRFNULL,EPRFCAPS,EPRFNUMB,EPRFHEXO,EPRFAUSV,+
+EPRFPACK,EPRFPROF,EPRFTABS,EPRFAULS,EPRFNOTE,EPRFAUNM)'
+)PROC
+IF (&ZCMD ¬= 'CAN','CANCEL')
+  VER (&EPRFRECY,LIST,'ON','OFF','OFF WARN','OFF NOWARN',MSG=EPRF000)
+  VER (&EPRFPROF,LIST,'LOCK','UNLOCK',MSG=EPRF001)
+  VER (&EPRFCAPS,LIST,'ON','OFF',MSG=EPRF002)
+  VER (&EPRFNOTE,LIST,'ON','OFF',MSG=EPRF003)
+  VER (&EPRFHEXO,LIST,'ON','OFF','ON VERT','ON DATA',MSG=EPRF004)
+  VER (&EPRFPACK,LIST,'ON','OFF',MSG=EPRF005)
+  VER (&EPRFNULL,LIST,'ON','OFF','ON STD','ON ALL',MSG=EPRF006)
+  VER (&EPRFNUMB,LIST,'ON','OFF','ON STD','ON COB','ON COB STD','ON STD COB',+
+MSG=EPRF007)
+  VER (&EPRFSTAT,LIST,'ON','OFF',MSG=EPRF008)
+  VER (&EPRFTABS,LIST,'ON','OFF','ON STD','ON ALL','ON <CHAR>',MSG=EPRF009)
+  VER (&EPRFAUNM,LIST,'ON','OFF',MSG=EPRF009A)
+  VER (&EPRFAULS,LIST,'ON','OFF',MSG=EPRF009B)
+  VER (&EPRFAUSV,LIST,'ON','OFF','OFF PROMPT','OFF NOPROMPT',MSG=EPRF009C)
+  IF (&EPRFRECY = 'OFF')
+      &EPRFRECY = 'OFF WARN'
+  IF (&EPRFHEXO = 'ON')
+      &EPRFHEXO = 'ON VERT'
+  IF (&EPRFNUMB = 'ON')
+      &EPRFNUMB = 'ON STD'
+  IF (&EPRFNULL = 'ON')
+      &EPRFNULL = 'ON STD'
+  IF (&EPRFTABS = 'ON')
+      &EPRFTABS = 'ON STD'
+  IF (&EPRFTABS = 'ON <CHAR>')
+      IF (&ZEDPTABC = ' ')
+         .MSG=EPRF009D
+  IF (&EPRFAUSV = 'OFF')
+      &EPRFAUSV = 'OFF PROMPT'
+  IF (&ZEDPIMAC = 'NONE')
+      &ZEDPIMAC = ' '
+)END
+./ ADD NAME=EPRFLERR 0100-02231-02231-1300-00010-00010-00000-MOORE
+)ATTR
+)BODY WINDOW(28,4)
+%                          +
++&EPRFGERR                 +
+%                          +
++ Press%ENTER+to continue  +
+)INIT
+&ZWINTTL = 'Line Command Error'
+)PROC
+)END
+./ ADD NAME=EPRFMAIN 0100-02231-02231-1300-00030-00030-00000-MOORE
+)PANEL
+)ATTR DEFAULT() FORMAT(MIX)
+ 2B TYPE(PT)
+ 09 TYPE(FP)
+ 0A TYPE(NT)
+ 13 TYPE(NEF) PADC(USER)
+ 16 TYPE(VOI) PADC(USER)
+ 19 TYPE(DT)
+ 10 TYPE(ET)
+ 26 AREA(DYNAMIC) EXTEND(ON) SCROLL(ON) DATAMOD('06')
+ 01 TYPE(DATAOUT) INTENS(LOW) COLOR(BLUE)
+ 04 TYPE(DATAIN) CAPS(ON) COLOR(RED) HILITE(USCORE)
+ 2E TYPE(NEF) CAPS(ON) PADC(USER)
+)BODY CMD(ZCMD)
+                       Z                                     &HEADER         
+Command ===>Z                                            Scroll ===>Z     
+
+   Profile Name/Type           I-Macro--Recovery-Stats-Caps-Nulls-Number-Hi   
+DYNAREA                                                                       
+)INIT
+.ZVARS = '(ZHDRTITL ZCMD AMT)'
+.HELP = EPRFTUT1
+&ZWINTTL = 'Edit Profile Utility'
+&ZHDRTITL = 'Current Edit Profiles in &ZAPPLID'
+)REINIT
+REFRESH (*)
+)PROC
+VPUT (ZCMD)
+&LASTLINE = LVLINE(DYNAREA)
+)END
+./ ADD NAME=EPRFTUT1 0100-02231-02231-1300-00118-00118-00000-MOORE
+)PANEL
+)ATTR DEFAULT() FORMAT(MIX)                             /* ENGLISH */
+ 05 TYPE(PT)
+ 0A TYPE(NT)
+ 10 TYPE(ET)
+ 26 AREA(SCRL) EXTEND(ON)
+)BODY WINDOW(76,21) CMD()
+                   	Help for Edit Profile Utility                        
+EAREA30                                                                   
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+                                                                          
+)AREA EAREA30
+The Edit Profile Utility allows an ISPF edit user to view, delete and    
+modify existing edit profiles from outside of edit. It also has the      
+ability to propagate profile settings into ALL profile rows.              
+
+Line actionsare placed next to the edit profile that is chosen.         
+Primary commands are entered at the Command ===> line.                   
+Line actions commands are processed before any primary command.           
+
+The valid edit profile line actions are:                                 
+
+o  S Select this profile to view or modify.                            
+o  D Delete this profile row.                                          
+
+Any other character that is entered as a line command is an error.        
+
+Primarycommands are placed on the command line. Most commands that      
+propagate profiles settings have the same names as edit (STATS, NULLS)    
+
+The valid edit profile primary commands are:                             
+
+o  Refresh(also Ref)                                                    
+    Drop and recreate the display.                                      
+
+The remaining commands all propagate profile settings
+
+o  Imacro macname(also IMAC, IM)                                       
+    Copies the named initial edit macro into all displayed profiles.      
+    To remove all initial edit macros, use the wordNONEas the macname.  
+    The macname is required and it must pass all name edits.
+
+o  Stats On/Off(also Stat)                                             
+    Turns STATS ON or OFF for all displayed profiles. Only ON or OFF are 
+   considered valid parameters. ON or OFF are required.                 
+
+o  Caps On/Off(also Cap)                                               
+    Turns CAPS ON or OFF for all displayed profiles. Only ON or OFF are 
+   considered valid parameters. ON or OFF are required.                 
+
+o  Pack On/Off                                                         
+    Turns PACK ON or OFF for all displayed profiles. Only ON or OFF are 
+   considered valid parameters. ON or OFF are required.                 
+
+o  Nulls On/Off(also Null)                                              
+    Turns NULLS ON or OFF for all displayed profiles. Only ON or OFF     
+   are considered valid parameters. ON or OFF are required. To change    
+    a profile setting to NULLS ALL, select the individual profile.        
+                                                                          
+o  Number On/Off(also NUM, NBR)                                         
+    Turns NUMBER ON or OFF for all displayed profiles. Only ON or OFF    
+   are considered valid parameters. ON or OFF are required. To change a  
+    profile to NUM COB or NUM COB STD, select the individual profile.     
+                                                                          
+o  Recover On/Off(also RECOVER, REC)                                    
+    Turns RECOVERY ON or OFF for all displayed profiles. Only ON or OFF  
+   are considered valid parameters. ON or OFF are required. To change a  
+    profile to OFF NOWARN, select the individual profile.                 
+                                                                          
+o  Hilite On/Off/Paren/Find/Cursor/Auto(also HI)                        
+    Turns HILITE ON or OFF for all displayed profiles. Hilite must have   
+   one of the parmeters listed above when entered. Read more about color 
+    highlighting in the main ISPF edit tutorial.                          
+                                                                          
+Usage Notes:                                                            
+The Edit Profile Utility reads and modifies the edit profile table       
+that is present for the application-id (NEWAPPL) that it is run under.    
+Under IBM ISPF, this will typically beISREDITbut could be different.    
+                                                                          
+When using the Edit Profile Utility to modify edit profiles, if you       
+have an open edit session on another logical (split) screen, the new      
+settings will not be activated until such edit session is ended and       
+then restarted using the newly modified profile.                          
+                                                                          
+Edit profile tables are unsorted, unkeyed ISPF tables. However, the       
+editor (and this utility) maintain the table inmost recently used       
+order. That is, the oldest profiles will be the furthest ones down in     
+the display.                                                              
+                                                                          
+The ISPF editor will override and reset certain profile settings          
+automatically. If this utility is used to propagate On/Off settings       
+into all profiles, when a file is edited using an altered profile, don't  
+be alarmed if the editor reverts the setting to the opposite. This is most
+likey to occur with STATS, CAPS or NUMBER. For example, if a "flat file"  
+(DSORG=PS) is edited and the profile setting isSTATS ON,the editor      
+will correctly adjust the profile setting toSTATS OFF.                  
+                                                                          
+)INIT
+&ZWINTTL = ' '
+.HHELP = ISP00006
+)END
+./ ADD NAME=EPRF00   0100-02231-02231-1300-00048-00048-00000-MOORE
+EPRF000  'Invalid RECOVERY Setting' .HELP=ISR2M150 .TYPE=N NOKANA
+'Valid RECOVERY settings are: ON, OFF, OFF WARN, OFF NOWARN'
+EPRF001  'Invalid PROFILE Setting' .HELP=ISR2M143 .TYPE=N NOKANA
+'Valid PROFILE settings are: LOCK, UNLOCK'
+EPRF002  'Invalid CAPS Setting' .HELP=ISR2M410 .TYPE=N NOKANA
+'Valid CAPS settings are: ON, OFF'
+EPRF003  'Invalid NOTE Setting' .HELP=ISR2M460 .TYPE=N NOKANA
+'Valid NOTE settings are: ON, OFF'
+EPRF004  'Invalid HEX Setting' .HELP=ISR2M420 .TYPE=N NOKANA
+'Valid HEX settings are: ON, OFF, ON VERT, ON DATA'
+EPRF005  'Invalid PACK Setting' .HELP=ISR2M570 .TYPE=N NOKANA
+'Valid PACK settings are: ON, OFF'
+EPRF006  'Invalid NULLS Setting' .HELP=ISR2M430 .TYPE=N NOKANA
+'Valid NULLS settings are: ON, OFF, ON STD, ON ALL'
+EPRF007  'Invalid NUMBER Setting' .HELP=ISR2M310 .TYPE=N NOKANA
+'Valid NUMBER settings are: ON, OFF, ON STD, ON COB, ON COB STD'
+EPRF008  'Invalid STATS Setting' .HELP=ISR2M530 .TYPE=N NOKANA
+'Valid STATS settings are: ON, OFF'
+EPRF009  'Invalid TABS Setting' .HELP=ISR2M440 .TYPE=N NOKANA
+'Valid TABS settings are: ON, OFF, ON STD, ON ALL, ON <char>'
+EPRF009A 'Invalid AUTONUM Setting' .HELP=ISR2M510 .TYPE=N NOKANA
+'Valid AUTONUM settings are: ON, OFF'
+EPRF009B 'Invalid AUTOLIST Setting' .HELP=ISR2M520 .TYPE=N NOKANA
+'Valid AUTOLIST settings are: ON, OFF'
+EPRF009C 'Invalid AUTOSAVE Setting' .HELP=ISR2M540 .TYPE=N NOKANA
+'Valid AUTOSAVE settings are: ON, OFF, OFF PROMPT, OFF NOPROMPT'
+EPRF009D 'Invalid - No Tab Char' .HELP=ISR2M440 .TYPE=N NOKANA
+'To use the "TABS <CHAR>" choice, you must have a chosen Tab Character'
+EPRF009E 'Too Many Command Parms' .HELP=EPRFTUT1 .TYPE=N NOKANA
+'Commands for this utility are in the form: COMMAND Parm OR COMMAND'
+EPRF009F 'Invalid "HILITE" Parm' .HELP=EPRFTUT1 .TYPE=N NOKANA
+'Valid parm values are: PAREN, CURSOR, FIND and AUTO'
+EPRF009G 'Edit Profile Updated' .HELP=EPRFTUT1 .TYPE=N NOKANA
+'&EPRFGMSG Had at least one setting changed'
+EPRF009H 'Too Many Profile Rows'  .HELP=EPRFTUT1 .TYPE=N NOKANA
+'The maximum number of supported rows for this utility exceeded'
+EPRF009I 'Invalid IMACRO Name'    .HELP=EPRFTUT1 .TYPE=N NOKANA
+'Must be in "Member Name" format or begin with "!"'
+EPRF009J '"ON" or "OFF" Only'    .HELP=EPRFTUT1 .TYPE=N NOKANA
+'For this command, the only valid parameters are "ON" or "OFF"'
+EPRF009K 'Missing IMACRO Name'   .HELP=EPRFTUT1 .TYPE=N NOKANA
+'To remove IMACRO from all profiles, use NONE as IMACRO name'
+EPRF009L 'Missing "ON/OFF"'      .HELP=EPRFTUT1 .TYPE=N NOKANA
+'This command requires either ON or OFF as a parameter'
+EPRF009M 'LE Service Error'   .HELP=EPRFTUT1 .TYPE=N NOKANA
+'&EPRFGMSG'
+EPRF009N '&EPRFEPGM Not Found' .HELP=EPRFTUT1 .TYPE=N NOKANA
+'&EPRFEPGM - This program needs to be in STEPLIB, LINKLIST or TSOLIB'
+./ ADD NAME=EPROF    0100-02231-02231-1300-00008-00008-00000-MOORE
+/* REXX */
+PARSE UPPER ARG Debug
+ADDRESS ISPEXEC
+"LIBDEF ISPPLIB DATASET ID('panel.pds') STACK"
+"LIBDEF ISPMLIB DATASET ID('message.pds') STACK"
+"SELECT PGM(CLCCEPRF) PARM("Debug")"
+"LIBDEF ISPPLIB"
+"LIBDEF ISPMLIB"
+./ ADD NAME=INSTALL  0100-02231-02231-1300-00099-00099-00000-MOORE
+    **STOP**STOP**STOP**STOP**STOP**STOP**STOP**STOP**STOP**STOP**
+
+    DO NOT USE ISPF EDIT on this FILE. Use BROWSE instead. If in
+    EDIT, issue a CANCEL now. Some data extends into columns 73-80.
+    NUM ON STD could damage this file.
+
+    **STOP**STOP**STOP**STOP**STOP**STOP**STOP**STOP**STOP**STOP**
+
+ This file is in IEBUPDTE format. Here is a sample IEBUPDTE JCL stream:
+
+      //IEBUPDTE EXEC  PGM=IEBUPDTE,PARM=NEW
+      //SYSPRINT DD SYSOUT=*
+      //SYSUT2   DD DSN=pds.to.populate,DISP=SHR
+      //SYSIN    DD DSN=flat.file.with.dot.slash,DISP=SHR
+
+ This file would be the 'flat.file.with.dot.slash'. The PDS should
+ have an LRECL of 80. 4 or 5 TRKs would be more than adequate for
+ SPACE.
+
+ Once the PDS has been populated, it should contain the following
+ members:
+
+  ----------- Assembler Programs---------------------------
+  VIEWUP03 - Utility program that returns EBCDIC address of 1st
+             address passed to it BY REFERENCE.
+             Optional - Used only for debugging
+  CLCAUP01 - Utility program that left-justifies and smooths strings
+             Required
+
+  ----------- COBOL Programs-------------------------------
+  CLCCEPRF - Primary dialog function
+             Required
+
+  ----------- Panels---------------------------------------
+  EPRFCOND - The "Confirm Delete" pop-up for a profile row
+  EPRFDETL - The detail pop-up when viewing a profile row
+  EPRFLERR - The Line Command error pop-up
+  EPRFMAIN - The main panel
+  EPRFTUT1 - The tutorial panel
+
+  ----------- Messages-------------------------------------
+  EPRF00   - All ISPF messages in this member
+
+  ----------- REXX-----------------------------------------
+  EPROF    - Launching REXX EXEC
+             Optional, used to LIBDEF Panels/Messages
+
+  -----------RECOMMENDED INSTALL TECHNIQUE------------------------
+
+  To activate the EPROF dialog, take the following steps:
+
+  1) Copy the panels to a PDS that is already allocated (via logon)
+     to the DD name ISPPLIB.
+
+  2) Copy the message member to a PDS that is already allocated
+     (via logon) to the DD name ISPMLIB.
+
+  3) Edit the EPROF REXX EXEC and remove the LIBDEF statements. Then
+     copy the EPROF REXX EXEC to a PDS that is allocated at
+     either SYSPROC (normally CLISTs) or SYSEXEC (REXX). Either
+     DD name is OK as long as the /* REXX */ comment that appears as
+     the first line is left in place.
+
+  3) Assemble and link the CLCAUP01 and VIEWUP03 Assembler programs.
+     VIEWUP03 is only used when debugging. Then compile and link the
+     primary COBOL program named CLCCEPRF.
+
+     Link all programs into a library that is accessible to all
+     TSO/ISPF sessions:
+
+     o One that is pre-allocated to STEPLIB
+     o One that is in the LINKLIST or LPA
+
+   -----------ALTERNATE INSTALL TECHNIQUE------------------------
+
+  1) Edit the LIBDEF statements in the EPROF EXEC so that the name of
+     the PDS that contains the panels/messages is in the LIBDEFs.
+
+  2) Copy the EPROF REXX EXEC (with LIBDEFs in place) to a PDS that
+     is allocated at either SYSPROC (normally CLISTs) or SYSEXEC (REXX).
+     Either DD name is OK as long as the /* REXX */ comment that appears
+     as the first line is left in place.
+
+  3) From outside of ISPF (at TSO Ready), issue a TSOLIB command. The
+     name of the load library should be the same one that the Assembler
+     and COBOL programs were linked into. Here's an example:
+
+     TSOLIB ACTIVATE DA('some.loadlib')
+
+ Once installed, the dialog is invoked by entering:
+
+                TSO EPROF
+
+ from the Command ==> line of any ISPF panel.
+
+ Jim Moore
+ Concentrated Logic Inc.
+ conlogco@attbi.com
+ "Working Smarter"
+./ ADD NAME=VIEWUP03 0100-02231-02231-1300-00078-00078-00000-MOORE
+*---------------------/*-------------------------------------------
+R0       EQU   0      /*  VIEWUP03 - By Jim Moore
+R1       EQU   1      /*             Concentrated Logic Inc
+R2       EQU   2      /* ------------------------------------------
+R3       EQU   3      /* This program is passed two addresses. It
+R4       EQU   4      /* stores, translates and returns the first
+R5       EQU   5      /* address passed to it in the area pointed to
+R6       EQU   6      /* by the second address. It is meant to
+R7       EQU   7      /* demonstrate how a "CALL BY REFERENCE" really
+R8       EQU   8      /* works. Use it from any language that supports
+R9       EQU   9      /* a "CALL BY REFERENCE".
+R10      EQU   10     /*
+R11      EQU   11     /* It uses AMODE(31), RMODE(ANY) declaratives on
+R12      EQU   12     /* the CSECT. It is fully reentrant. Any address
+R13      EQU   13     /* passed to it will be converted, even 24-bit
+R14      EQU   14     /* addresses. Another "CALL BY REFERENCE" lesson:
+R15      EQU   15     /* AMODE(31) can handle AMODE(24)-not vice-versa
+*---------------------/* ----------------------------------------------
+VIEWUP03 CSECT                      /* PROGRAM-ID equivalent
+VIEWUP03 AMODE 31                   /* This code uses 31-bit storage
+VIEWUP03 RMODE ANY                  /* This code is 31-bit eligible
+         PRINT NOGEN                /* No macro expansion in SYSPRINT
+BEGIN    STM   R14,R12,12(R13)      /* Store regs in caller SAVEAREA
+         LR    R12,R15              /* Get VIEWUP03 entry addr in R12
+         L     R11,0(R1)            /* Load R11 with first parm address
+         L     R9,4(R1)             /* Load R9 with second parm address
+         USING LINKAGE,R11          /* Base 1st parm address
+         USING PASSBACK,R9          /* Base 2nd parm address
+         USING VIEWUP03,R12         /* Base entire program
+         LA    R0,LSTORAGE          /* Get STORAGE length into R0
+         GETMAIN RC,LV=(0)          /* Acquire storage
+         LTR   R15,R15              /* Did I get it?
+         BNZ   GETMERR              /* No, this is a problem
+         LR    R10,R1               /* Storage address returned in R1
+         USING STORAGE,R10          /* Base acquired storage
+         ST    R13,SAVEAREA+4       /* Save caller R13 address in chain
+         LA    R13,SAVEAREA         /* Point R13 at my SAVEAREA
+         ST    R13,SAVEAREA+8       /* Place my SAVEAREA addr in chain
+         B     MAINLINE             /* Go around literals
+COPYRITE DC  CL50'VIEWUP03 -   Concentrated Logic Inc - Translate a '
+         DC  CL50'passed address into "Printable Hex"   ASM->'
+         DC    C' &SYSDATC '        /* --------------------------------
+         DC    C' At '              /* Stamp OBJECT deck with
+         DC    C' &SYSTIME '        /* date, time and name of
+         DC    C' Using '           /* the assembler.
+         DC    C' &SYSASM'          /* --------------------------------
+MAINLINE ST    R11,DATADDR          /* Store 1st parm address value
+         LA    R2,DATADDR           /* Point to it with R2
+         UNPK  UNPACK(9),0(5,R2)    /* UNPK address (+1 slack byte)
+         TR    UNPACK,HEXTOCHR      /* Make it "printable"
+         MVC   RETDATA,UNPACK       /* Move it to 2nd address area
+RETURN   L     R13,SAVEAREA+4       /* Restore caller's R13 value
+         LA    R0,LSTORAGE          /* Get STORAGE length into R0
+         FREEMAIN RU,LV=(0),A=(10)  /* Free STORAGE (R10-based)
+GOBACK   LM    R14,R12,12(R13)      /* Restore caller's registers
+         SR    R15,R15              /* Clear R15 (RC=0)
+         BR    R14                  /* Back to caller's next instruc
+GETMERR  LM    R14,R12,12(R13)      /* Restore caller's registers
+         L     R15,8                /* Bad return-code (RC=8)
+         BR    R14                  /* Back with RC=8
+         DS    0F                   /* Align translate table
+*        DC    CL239' '             /* Displace into TR table
+HEXTOCHR EQU   *-C'0'               /*
+         DC    C'0123456789ABCDEF'  /* All 16 unary hex digits
+         LTORG
+LINKAGE  DSECT                      /* --------------------------------
+         DS CL4                     /* Ignore this value
+PASSBACK DSECT                      /* --------------------------------
+RETDATA  DS CL8                     /* UNPK'd and TR address here
+STORAGE  DSECT                      /* --------------------------------
+SAVEAREA DS 18F                     /* Register save area
+DATADDR  DS F                       /* Aligned storage
+         DS CL1                     /* Plus an extra byte
+         DS 0F                      /* Align the Unpack area
+UNPACK   DS CL8                     /* Unpack here
+         DS CL1                     /* Plus an extra byte
+LSTORAGE EQU *-STORAGE              /* LSTORAGE = Length of DSECT
+         END

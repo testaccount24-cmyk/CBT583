@@ -1,0 +1,9 @@
+2025-04-04 12:10:28.235741 - Received CBT.V508.FILE583.PDS from FILE583.XMI 
+2025-04-04 12:10:28.236522 - Found $$$#DATE.txt (text/plain) in CBT.V508.FILE583.PDS, moved to PDS/$$$#DATE
+2025-04-04 12:10:28.236670 - Found $$$NOTE1.eml (message/rfc822) in CBT.V508.FILE583.PDS, moved to PDS/$$$NOTE1
+2025-04-04 12:10:28.236802 - Found $$$NOTE2.eml (message/rfc822) in CBT.V508.FILE583.PDS, moved to PDS/$$$NOTE2
+2025-04-04 12:10:28.236926 - Found $$$NOTE3.txt (text/plain) in CBT.V508.FILE583.PDS, moved to PDS/$$$NOTE3
+2025-04-04 12:10:28.237047 - Found $$$NOTE4.eml (message/rfc822) in CBT.V508.FILE583.PDS, moved to PDS/$$$NOTE4
+2025-04-04 12:10:28.237181 - Found @FILE583.txt (text/plain) in CBT.V508.FILE583.PDS, moved to PDS/@FILE583
+2025-04-04 12:10:28.237345 - Found EPROF.txt (text/plain) in CBT.V508.FILE583.PDS, moved to PDS/EPROF
+2025-04-04 12:10:28.237471 - Found PROFSET.txt (text/plain) in CBT.V508.FILE583.PDS, moved to PDS/PROFSET
